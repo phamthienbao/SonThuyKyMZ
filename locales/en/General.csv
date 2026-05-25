@@ -7,4 +7,4 @@ cmd_start;Start Journey
 cmd_continue;Continue
 cmd_options;Options
 msg_welcome;"Welcome, traveler!"
-thuytinh;"Giang Hải"
+thuytinh;"Giang Hải", "Giang Hai"

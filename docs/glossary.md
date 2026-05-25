@@ -30,7 +30,7 @@ Note: the i18n keys `{sontinh}` and `{thuytinh}` are historical — they identif
 
 | Vietnamese | English | Implementation Status |
 |---|---|---|
-| Bóng Tối Gauge | Darkness Gauge (Hải's resource that overflows into loss-of-control) | **v1.1 shipped** — KB_BongToiGauge.js (sprite gauge via Sprite_KBBongToiGauge), State 28, Skills 490/491 |
+| Bóng Tối Gauge (DP) | Darkness Gauge (Hải's resource that overflows into loss-of-control). Label: "DP" (Dark Point). | **v1.5 shipped** — KB_BongToiGauge.js (sprite gauge via Sprite_KBBongToiGaugePanel [panel mode] or Sprite_KBBongToiGaugeOverlay [overlay mode]), State 28, Skills 490/491. v1.5 defaults to panel-mode rendering inside the status window (drawMode="panel"). |
 | Ngọc Hồn | Soul Jade (gating accessory across Ch.2–4) | **v1.0 built** — KB_NgocHonState.js tracks 3-shard convergence; item/armor data entries TBD |
 | Sách Ước | Wishing Book (out-of-combat resource, 1–2 uses/chapter) | **NOT BUILT** |
 | Summon System | 3 thần thú: Voi (Elephant), Gà (Chicken), Ngựa (Horse) — 1/battle each | **PARTIAL** — Voi & Gà exist as plain enemies, not summons |

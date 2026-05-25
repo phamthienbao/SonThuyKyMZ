@@ -4,22 +4,23 @@
 //=============================================================================
 /*:
  * @target MZ
- * @plugindesc (v1.4) Bóng Tối Gauge — cơ chế đặc trưng của Hải. Đầy bình → mất kiểm soát 1 turn.
+ * @plugindesc (v1.5) Bóng Tối / DP Gauge — Hải's signature gauge. Renders next to HP/MP/TP in VisuMZ Sideview UI.
  * @author KB
  * @base KB_CoreEngine
  * @orderAfter VisuMZ_1_BattleCore
+ * @orderAfter VisuMZ_3_SideviewBattleUI
  *
  * @help
  * ============================================================================
- * KB Bóng Tối Gauge (v1.0)
+ * KB Bóng Tối Gauge (v1.5)
  * ============================================================================
  *
  * YÊU CẦU:
  * - KB_CoreEngine phải nằm phía trên plugin này.
- * - Nên đặt sau VisuMZ_1_BattleCore.
+ * - Nên đặt sau VisuMZ_1_BattleCore và VisuMZ_3_SideviewBattleUI.
  *
  * CƠ CHẾ:
- * Hải có một thanh "Bóng Tối" (0–Max). Thanh tăng khi:
+ * Hải có một thanh "Bóng Tối" (DP — Dark Point) 0..Max. Thanh tăng khi:
  *   1. Hải dùng skill có notetag `<bongtoi: +N>`.
  *   2. HP của Hải xuống dưới % ngưỡng (mặc định 30%).
  *   3. Hải nhận state có notetag `<bongtoi: +N>` (ví dụ tự buff Long Vương).
@@ -39,15 +40,17 @@
  * GAUGE PERSISTENCE:
  *   Thanh được lưu trong $gameVariables — save/load tự động.
  *
- * UI:
- *   Hiển thị "[BT: X/Max]" sau tên Hải trong Battle Status Window.
- *   (Có thể tắt qua param "Hiện gauge trong battle".)
+ * UI MODES (v1.5):
+ *   - "panel"   : Vẽ DP gauge BÊN TRONG panel sideview của Hải, ngay dưới TP.
+ *                 Đi cùng HP/MP/TP, tự nhận theme/scale của VisuMZ sideview UI.
+ *   - "overlay" : Vẽ overlay sprite ở scene level (cách cũ của v1.3/v1.4).
+ *                 Fallback cho trường hợp không dùng VisuMZ_3_SideviewBattleUI
+ *                 hoặc panel không có chỗ.
+ *
+ *   Đổi qua tham số "drawMode". Mặc định: panel.
  *
  * COMMANDS (plugin command):
- *   - SetGauge value: đặt giá trị thanh.
- *   - AddGauge value: cộng/trừ.
- *   - ResetGauge:     reset.
- *   - TriggerOverflow: ép overflow ngay.
+ *   - SetGauge value, AddGauge value, ResetGauge, TriggerOverflow.
  *
  * ============================================================================
  *
@@ -106,27 +109,61 @@
  *
  * @param showInBattle
  * @text Hiện gauge trong battle
- * @desc Hiện gauge Bóng Tối overlay dưới panel của Hải.
+ * @desc Hiện DP gauge cho Hải trong battle scene.
  * @type boolean
  * @default true
  *
+ * @param drawMode
+ * @text Chế độ vẽ
+ * @desc "panel" = cùng panel HP/MP/TP (VisuMZ Sideview UI). "overlay" = sprite riêng dưới panel.
+ * @type select
+ * @option panel
+ * @option overlay
+ * @default panel
+ *
+ * @param label
+ * @text Nhãn gauge
+ * @desc Text hiển thị bên trái gauge. Dùng "DP" cho English, "BT" cho Việt.
+ * @default DP
+ *
+ * @param panelGaugeWidth
+ * @text Width (panel mode)
+ * @desc Bề rộng DP gauge khi vẽ trong panel sideview. Nên fit với HP/MP/TP của VisuMZ.
+ * @type number
+ * @min 16
+ * @default 96
+ *
+ * @param panelGaugeOffsetX
+ * @text Offset X (panel mode)
+ * @desc Lệch ngang khỏi vị trí TP gauge. 0 = thẳng cột TP.
+ * @type number
+ * @min -2000
+ * @default 0
+ *
+ * @param panelGaugeOffsetY
+ * @text Offset Y (panel mode)
+ * @desc Lệch dọc khỏi vị trí TP gauge. Mặc định = 1 row dưới TP.
+ * @type number
+ * @min -2000
+ * @default 0
+ *
  * @param gaugeWidth
- * @text Bề rộng gauge (px)
- * @desc Bề rộng của thanh gauge overlay.
+ * @text Width (overlay mode)
+ * @desc Bề rộng overlay sprite (scene-level).
  * @type number
  * @min 32
  * @default 160
  *
  * @param gaugeOffsetX
- * @text Offset X so với panel Hải
- * @desc Dịch ngang so với góc trái của Window_SideviewUiBattleStatus của Hải.
+ * @text Offset X (overlay mode)
+ * @desc Lệch ngang so với góc trái panel của Hải khi overlay.
  * @type number
  * @min -2000
  * @default 0
  *
  * @param gaugeOffsetY
- * @text Offset Y so với panel Hải
- * @desc Dịch dọc so với mép dưới panel của Hải (số dương = bên dưới).
+ * @text Offset Y (overlay mode)
+ * @desc Lệch dọc dưới mép panel khi overlay.
  * @type number
  * @min -2000
  * @default 4
@@ -164,13 +201,14 @@ Imported.KB_BongToiGauge = true;
 var KB = KB || {};
 KB.BongToi = KB.BongToi || {};
 KB.Versions = KB.Versions || {};
-KB.Versions.BongToi = "1.4.0";
+KB.Versions.BongToi = "1.5.0";
 
 (() => {
     "use strict";
 
     const PLUGIN_NAME = "KB_BongToiGauge";
     const TAG = `[${PLUGIN_NAME}]`;
+    const GAUGE_TYPE = "kb_bongtoi";
 
     // --- Parse params (defensive) ----------------------------------------
     const _raw = PluginManager.parameters(PLUGIN_NAME);
@@ -183,21 +221,30 @@ KB.Versions.BongToi = "1.4.0";
         if (_raw[k] === "false") return false;
         return d;
     };
+    const _str = (k, d) => {
+        const v = _raw[k];
+        return (typeof v === "string" && v.length > 0) ? v : d;
+    };
 
     const P = {
-        actorId:          _num("actorId", 3),
-        gaugeVarId:       _num("gaugeVarId", 22),
-        overflowSwitchId: _num("overflowSwitchId", 32),
-        maxValue:         _num("maxValue", 100),
-        overflowStateId:  _num("overflowStateId", 28),
-        lowHpThreshold:   _num("lowHpThreshold", 30),
-        lowHpFillPerTurn: _num("lowHpFillPerTurn", 10),
-        decayPerTurn:     _num("decayPerTurn", 0),
-        showInBattle:     _bool("showInBattle", true),
-        gaugeWidth:       _num("gaugeWidth", 160),
-        gaugeOffsetX:     _num("gaugeOffsetX", 0),
-        gaugeOffsetY:     _num("gaugeOffsetY", 4),
-        debugMode:        _bool("debugMode", false),
+        actorId:           _num("actorId", 3),
+        gaugeVarId:        _num("gaugeVarId", 22),
+        overflowSwitchId:  _num("overflowSwitchId", 32),
+        maxValue:          _num("maxValue", 100),
+        overflowStateId:   _num("overflowStateId", 28),
+        lowHpThreshold:    _num("lowHpThreshold", 30),
+        lowHpFillPerTurn:  _num("lowHpFillPerTurn", 10),
+        decayPerTurn:      _num("decayPerTurn", 0),
+        showInBattle:      _bool("showInBattle", true),
+        drawMode:          _str("drawMode", "panel"),
+        label:             _str("label", "DP"),
+        panelGaugeWidth:   _num("panelGaugeWidth", 96),
+        panelGaugeOffsetX: _num("panelGaugeOffsetX", 0),
+        panelGaugeOffsetY: _num("panelGaugeOffsetY", 0),
+        gaugeWidth:        _num("gaugeWidth", 160),
+        gaugeOffsetX:      _num("gaugeOffsetX", 0),
+        gaugeOffsetY:      _num("gaugeOffsetY", 4),
+        debugMode:         _bool("debugMode", false),
     };
 
     KB.BongToi.params = P;
@@ -213,6 +260,8 @@ KB.Versions.BongToi = "1.4.0";
     KB.BongToi.get = function() {
         return $gameVariables ? Number($gameVariables.value(P.gaugeVarId)) || 0 : 0;
     };
+
+    KB.BongToi.max = function() { return P.maxValue; };
 
     KB.BongToi.set = function(v) {
         try {
@@ -247,12 +296,10 @@ KB.Versions.BongToi = "1.4.0";
             const hai = this.haiActor();
             if (!hai) { dbg("triggerOverflow: Hải actor missing"); return; }
             $gameSwitches.setValue(P.overflowSwitchId, true);
-            // Apply state only during battle; out of battle we just flip the switch.
             if ($gameParty.inBattle()) {
                 hai.addState(P.overflowStateId);
                 dbg("triggerOverflow: applied state", P.overflowStateId, "to Hải");
             }
-            // Reset gauge after triggering.
             $gameVariables.setValue(P.gaugeVarId, 0);
         } catch (e) { errLog("triggerOverflow", e); }
     };
@@ -264,7 +311,6 @@ KB.Versions.BongToi = "1.4.0";
     };
 
     // --- Notetag parsing -------------------------------------------------
-    // Accepts: <bongtoi: +10>, <bongtoi: -5>, <bongtoi: reset>
     const RE_BONGTOI = /<\s*bongtoi\s*:\s*([+-]?\d+|reset)\s*>/i;
 
     function readNote(obj) {
@@ -297,7 +343,6 @@ KB.Versions.BongToi = "1.4.0";
             const subject = this.subject();
             if (!subject || !subject.isActor()) return;
             if (subject.actorId() !== P.actorId) return;
-            // Only fire once per action — applyItemUserEffect runs for each target.
             if (this._kbBongToiApplied) return;
             this._kbBongToiApplied = true;
             KB.BongToi._applyNote(this.item(), true);
@@ -347,66 +392,176 @@ KB.Versions.BongToi = "1.4.0";
         _BattleManager_endBattle.call(this, result);
     };
 
-    // --- UI: custom Bóng Tối gauge sprite ---------------------------------
-    // Drawn below HP/MP/TP in any Window_StatusBase that hosts Hải. Works with
-    // both the default Window_BattleStatus AND VisuMZ_3_SideviewBattleUI's
-    // Window_SideviewUiBattleStatus (both extend Window_StatusBase and call
-    // placeBasicGauges, which is core RMMZ and not minified by VisuMZ).
+    // --- Sprite class -----------------------------------------------------
+    // Single base class; two width subclasses to suit "panel" vs "overlay"
+    // contexts. createInnerSprite calls `new C()` with no args, so bitmap
+    // dimensions must be class-level — we can't pass a width per-instance.
 
-    function Sprite_KBBongToiGauge() {
-        this.initialize(...arguments);
-    }
-    Sprite_KBBongToiGauge.prototype = Object.create(Sprite_Gauge.prototype);
-    Sprite_KBBongToiGauge.prototype.constructor = Sprite_KBBongToiGauge;
+    function Sprite_KBBongToiGaugeBase() { this.initialize(...arguments); }
+    Sprite_KBBongToiGaugeBase.prototype = Object.create(Sprite_Gauge.prototype);
+    Sprite_KBBongToiGaugeBase.prototype.constructor = Sprite_KBBongToiGaugeBase;
 
-    Sprite_KBBongToiGauge.prototype.label = function() { return "BT"; };
-    Sprite_KBBongToiGauge.prototype.currentValue = function() {
+    Sprite_KBBongToiGaugeBase.prototype.label = function() { return P.label; };
+    Sprite_KBBongToiGaugeBase.prototype.currentValue = function() {
         return KB.BongToi.get();
     };
-    Sprite_KBBongToiGauge.prototype.currentMaxValue = function() {
+    Sprite_KBBongToiGaugeBase.prototype.currentMaxValue = function() {
         return P.maxValue;
     };
-    Sprite_KBBongToiGauge.prototype.gaugeColor1 = function() {
+    Sprite_KBBongToiGaugeBase.prototype.gaugeColor1 = function() {
         const v = this.currentValue(), max = this.currentMaxValue();
         if (v >= max) return "#FF3355";
         if (v >= max * 0.8) return "#C04A00";
         return "#3A1A5C";
     };
-    Sprite_KBBongToiGauge.prototype.gaugeColor2 = function() {
+    Sprite_KBBongToiGaugeBase.prototype.gaugeColor2 = function() {
         const v = this.currentValue(), max = this.currentMaxValue();
         if (v >= max) return "#FFAA88";
         if (v >= max * 0.8) return "#E18800";
         return "#A48EE1";
     };
-    Sprite_KBBongToiGauge.prototype.labelColor = function() {
+    Sprite_KBBongToiGaugeBase.prototype.labelColor = function() {
         return ColorManager.systemColor();
     };
-    // Width comes from plugin param — VisuMZ's status panels are narrow, but
-    // because we render OUTSIDE the panel (as a scene overlay) we're not
-    // bound by their dimensions.
-    Sprite_KBBongToiGauge.prototype.bitmapWidth = function() {
+
+    function Sprite_KBBongToiGaugePanel() { this.initialize(...arguments); }
+    Sprite_KBBongToiGaugePanel.prototype = Object.create(Sprite_KBBongToiGaugeBase.prototype);
+    Sprite_KBBongToiGaugePanel.prototype.constructor = Sprite_KBBongToiGaugePanel;
+    Sprite_KBBongToiGaugePanel.prototype.bitmapWidth = function() {
+        return P.panelGaugeWidth;
+    };
+
+    function Sprite_KBBongToiGaugeOverlay() { this.initialize(...arguments); }
+    Sprite_KBBongToiGaugeOverlay.prototype = Object.create(Sprite_KBBongToiGaugeBase.prototype);
+    Sprite_KBBongToiGaugeOverlay.prototype.constructor = Sprite_KBBongToiGaugeOverlay;
+    Sprite_KBBongToiGaugeOverlay.prototype.bitmapWidth = function() {
         return P.gaugeWidth;
     };
 
-    KB.BongToi.Sprite = Sprite_KBBongToiGauge;
+    KB.BongToi.Sprite = Sprite_KBBongToiGaugeBase;
+    KB.BongToi.SpritePanel = Sprite_KBBongToiGaugePanel;
+    KB.BongToi.SpriteOverlay = Sprite_KBBongToiGaugeOverlay;
 
-    // --- Scene_Battle overlay ---------------------------------------------
-    // Earlier attempts (v1.1 hooked placeBasicGauges, v1.2 hooked placeGauge)
-    // both placed the gauge as a child of Window_SideviewUiBattleStatus.
-    // That window is sized for HP/MP/TP only (~105px tall) and masks anything
-    // drawn below — so the gauge was created with visible:true but clipped
-    // off-screen. v1.3 creates the gauge as a child of the Scene_Battle root,
-    // outside any window mask, and repositions it each frame to track Hải's
-    // status panel.
+    // --- Window_StatusBase.placeGauge hook --------------------------------
+    // Intercept the core gauge-placement so:
+    //   (a) type === "kb_bongtoi" routes to our custom sprite class instead
+    //       of the default Sprite_Gauge (which has no notion of our value).
+    //   (b) Whenever VisuMZ sideview UI places a "tp" gauge for Hải, we
+    //       chain a DP placement one gaugeLineHeight() below at the same X.
+    //       This puts DP visually next to HP/MP/TP, sharing the same panel
+    //       theming and scale.
+    //   (c) Track Hải's status window for overlay mode (legacy path).
 
-    if (P.showInBattle) {
+    // --- Window_SideviewUiBattleStatus height + position patch ------------
+    // VisuMZ auto-sizes each Sideview status panel for exactly HP+MP+TP rows
+    // (HEIGHT_BASE = "auto") and stacks them top-to-bottom in party order.
+    // Our DP row needs a 4th gauge slot inside Hải's panel, so we:
+    //   (1) Grow Hải's window height by one gauge row when updateBattler()
+    //       binds Hải — opens room inside the contents mask for DP.
+    //   (2) Each frame in updateSideviewUiPosition, shift panels for any
+    //       party member positioned AFTER Hải by the same extra height so
+    //       they don't overlap Hải's now-taller panel.
+    //
+    // VisuMZ stores the bound battler at `_battler` (not `_actor`).
+
+    function _kbExtraRowHeight(window) {
+        return window.gaugeLineHeight() + Math.max(0, P.panelGaugeOffsetY);
+    }
+
+    function _kbHaiPartyIndex() {
+        if (!$gameParty || !$gameParty.battleMembers) return -1;
+        const members = $gameParty.battleMembers();
+        for (let i = 0; i < members.length; i++) {
+            const m = members[i];
+            if (m && m.actorId && m.actorId() === P.actorId) return i;
+        }
+        return -1;
+    }
+
+    if (P.showInBattle && P.drawMode === "panel" &&
+        typeof Window_SideviewUiBattleStatus !== "undefined") {
+
+        const _updateBattler = Window_SideviewUiBattleStatus.prototype.updateBattler;
+        Window_SideviewUiBattleStatus.prototype.updateBattler = function() {
+            _updateBattler.call(this);
+            try {
+                const b = this._battler;
+                if (!b || !b.isActor || !b.isActor()) return;
+                if (b.actorId() !== P.actorId) return;
+                if (this._kbHeightExpanded) return;
+                const extra = _kbExtraRowHeight(this);
+                this.height += extra;
+                this._kbHeightExpanded = true;
+                this._kbExtraHeight = extra;
+                this.createContents();
+                this.refresh();
+                dbg(`expanded Hải panel by ${extra}px to fit DP gauge`);
+            } catch (e) { errLog("Window_SideviewUiBattleStatus.updateBattler", e); }
+        };
+
+        const _updateSideviewUiPosition = Window_SideviewUiBattleStatus.prototype.updateSideviewUiPosition;
+        if (typeof _updateSideviewUiPosition === "function") {
+            Window_SideviewUiBattleStatus.prototype.updateSideviewUiPosition = function() {
+                _updateSideviewUiPosition.call(this);
+                try {
+                    const b = this._battler;
+                    if (!b || !b.isActor || !b.isActor()) return;
+                    if (b.actorId() === P.actorId) return;
+                    const haiIdx = _kbHaiPartyIndex();
+                    if (haiIdx < 0) return;
+                    const myIdx = $gameParty.battleMembers().indexOf(b);
+                    if (myIdx <= haiIdx) return;
+                    this.y += _kbExtraRowHeight(this);
+                } catch (e) { errLog("updateSideviewUiPosition", e); }
+            };
+        }
+    }
+
+    const _placeGauge = Window_StatusBase.prototype.placeGauge;
+    Window_StatusBase.prototype.placeGauge = function(actor, type, x, y) {
+        if (type === GAUGE_TYPE) {
+            try {
+                const key = "actor%1-gauge-%2".format(actor.actorId(), type);
+                const sprite = this.createInnerSprite(key, Sprite_KBBongToiGaugePanel);
+                sprite.setup(actor, type);
+                sprite.move(x, y);
+                sprite.show();
+            } catch (e) { errLog("placeGauge:kb_bongtoi", e); }
+            return;
+        }
+
+        _placeGauge.call(this, actor, type, x, y);
+
+        try {
+            if (!actor || !actor.actorId) return;
+            const isHai = actor.actorId() === P.actorId;
+            if (!isHai) return;
+
+            if (P.showInBattle && P.drawMode === "panel" && type === "tp") {
+                const dy = y + this.gaugeLineHeight() + P.panelGaugeOffsetY;
+                const dx = x + P.panelGaugeOffsetX;
+                this.placeGauge(actor, GAUGE_TYPE, dx, dy);
+            }
+
+            if (P.drawMode === "overlay") {
+                const scene = SceneManager._scene;
+                if (scene instanceof Scene_Battle) scene._kbHaiWindow = this;
+            }
+        } catch (e) { errLog("placeGauge:hook", e); }
+    };
+
+    // --- Scene_Battle overlay (legacy fallback) ---------------------------
+    // Only active when drawMode === "overlay". The placeGauge hook above
+    // populates scene._kbHaiWindow so the overlay can track Hải's panel.
+
+    if (P.showInBattle && P.drawMode === "overlay") {
         const _SceneBattle_createDisplayObjects = Scene_Battle.prototype.createDisplayObjects;
         Scene_Battle.prototype.createDisplayObjects = function() {
             _SceneBattle_createDisplayObjects.call(this);
             try {
-                this._kbBongToiOverlay = new Sprite_KBBongToiGauge();
+                this._kbBongToiOverlay = new Sprite_KBBongToiGaugeOverlay();
                 const hai = KB.BongToi.haiActor();
-                if (hai) this._kbBongToiOverlay.setup(hai, "kb_bongtoi");
+                if (hai) this._kbBongToiOverlay.setup(hai, GAUGE_TYPE);
                 this._kbBongToiOverlay.visible = false;
                 this.addChild(this._kbBongToiOverlay);
             } catch (e) { errLog("createDisplayObjects", e); }
@@ -427,29 +582,9 @@ KB.Versions.BongToi = "1.4.0";
         };
 
         Scene_Battle.prototype._kbFindHaiStatusWindow = function() {
-            // VisuMZ_3_SideviewBattleUI doesn't store the actor on the window
-            // under the standard `_actor` field — every Window_SideviewUiBattle
-            // Status reports _actor: undefined. We rely instead on a stashed
-            // reference set by the placeGauge hook below: whichever window
-            // VisuMZ calls placeGauge(haiActor, …) on is Hải's panel.
             const w = this._kbHaiWindow;
             if (w && w.visible && w.width && w.height) return w;
             return null;
-        };
-
-        // Lightweight placeGauge hook used ONLY to discover which window
-        // belongs to Hải. We do NOT draw the gauge in-window (that gets
-        // clipped — see v1.2/v1.3 changelog). The overlay sprite lives at
-        // the scene level and is repositioned each frame in Scene_Battle.update.
-        const _placeGauge = Window_StatusBase.prototype.placeGauge;
-        Window_StatusBase.prototype.placeGauge = function(actor, type, x, y) {
-            _placeGauge.call(this, actor, type, x, y);
-            try {
-                if (!actor || !actor.actorId) return;
-                if (actor.actorId() !== P.actorId) return;
-                const scene = SceneManager._scene;
-                if (scene instanceof Scene_Battle) scene._kbHaiWindow = this;
-            } catch (e) { errLog("placeGauge:track", e); }
         };
     }
 
@@ -469,17 +604,5 @@ KB.Versions.BongToi = "1.4.0";
     PluginManager.registerCommand(PLUGIN_NAME, "TriggerOverflow", () => {
         KB.BongToi.triggerOverflow();
     });
-
-    // --- Reset on new game / between battles (defensive) ------------------
-
-    const _GameSystem_init = Game_System.prototype.initialize;
-    Game_System.prototype.initialize = function() {
-        _GameSystem_init.call(this);
-        // Don't touch the gauge here — it's stored in $gameVariables which is
-        // initialized separately. New-game variables default to 0 anyway.
-    };
-
-    // --- Reset _kbBongToiApplied flag on each new action -----------------
-    // (handled implicitly since Game_Action instances are short-lived)
 
 })();

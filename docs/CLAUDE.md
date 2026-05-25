@@ -21,7 +21,10 @@ Story: three modern Vietnamese students are pulled into the past, each empowered
 - **`docs/design.md`** — architecture, systems, current → GDD v3 deltas
 - **`docs/proposal.md`** — open decisions needing user input
 - **`docs/glossary.md`** — Vietnamese ↔ English design terms
-- **`docs/spec/audit-v1.md`** — initial audit (2026-05-25)
+- **`docs/spec/`** — feature specs:
+  - `audit-v1.md` — initial audit (2026-05-25)
+  - `localization.md` — i18n system (KB_Localization)
+  - `save-system.md` — save/load UI (KB_SaveCore)
 - **`docs/changelog.md`** — append-only project history
 - **`docs/qc/`** — bug reports, QA findings
 
@@ -37,8 +40,10 @@ SonThuyKyMZ/                       ← single repo (game + docs)
 │   ├── plugins.js                 ← plugin manifest (do NOT hand-edit; use MZ editor)
 │   └── rmmz_*.js                  ← core engine (DO NOT MODIFY)
 ├── img/, audio/, fonts/, effects/, css/, icon/
-├── locales/                       ← KB_Localization CSVs (en/, vi/, Map/)
-│   └── main.csv, title.csv, charactor.csv
+├── locales/                       ← KB_Localization CSVs (see docs/spec/localization.md)
+│   ├── shared: main.csv, title.csv, charactor.csv, Map*.csv
+│   ├── vi/: General.csv, Quest.csv
+│   └── en/: General.csv, Quest.csv
 ├── save/                          ← test save files (gitignored)
 ├── Char Generation Template/      ← MZ character generator presets
 └── TN_SpriteExtenderEx/           ← sprite extension assets
@@ -74,8 +79,12 @@ SonThuyKyMZ/                       ← single repo (game + docs)
 
 ## Plugin stack (enabled, abbreviated)
 
-- **VisuMZ:** CoreEngine, BattleCore, BattleSystemSTB, ElementStatusCore, EventsMoveCore, ItemsEquipsCore, MainMenuCore, MessageCore, SaveCore, SkillsStatesCore, QuestSystem, VisualBattleEnv, WeaponAnimation, VictoryAftermath, VisualStateEffects, SideviewBattleUI, ActSeqCamera/Impact, BattleAI, WeaknessPopups, EncounterEffects, GabWindow, PictureCmnEvts
+- **VisuMZ:** CoreEngine, BattleCore, BattleSystemSTB, ElementStatusCore, EventsMoveCore, ItemsEquipsCore, MainMenuCore, MessageCore, SkillsStatesCore, QuestSystem, VisualBattleEnv, WeaponAnimation, VictoryAftermath, VisualStateEffects, ActSeqCamera/Impact, BattleAI, WeaknessPopups, EncounterEffects, GabWindow, PictureCmnEvts
 - **CGMZ:** Core, Encyclopedia, GameOver, MapNameWindow, ToastManager, FastTravel
 - **GabeMZ:** FollowersControl, EventFloatingInfo
-- **KB (custom, ours):** KB_CoreEngine, KB_Optimized, KB_TitleCommands, KB_Localization, KB_Dev_Extractor, KB_BongToiGauge, KB_NgocHonState
+- **KB (custom, ours):** KB_CoreEngine, KB_Optimized, KB_TitleCommands, KB_Localization, KB_Dev_Extractor, KB_SaveCore (save UI), KB_SideViewBattleUI (battle layout), KB_BongToiGauge, KB_NgocHonState
 - **Misc:** DragonSmoothCamera, MOG_TitleParticles, IgnisItemGoldPopup, schach-parsing/pathfinding, Public_0_PixiJsFilters
+
+**Note:** 
+- VisuMZ_1_SaveCore is disabled (replaced by KB_SaveCore). See `docs/spec/save-system.md` for details.
+- VisuMZ_3_SideviewBattleUI is disabled (replaced by KB_SideViewBattleUI). See `docs/spec/battle-ui.md` for details.

@@ -353,10 +353,18 @@ if (!Imported.KB_Core) {
             if (typeof text !== 'string') return text;
             if (text.indexOf('{') === -1) return text;
             if (this._cache[text]) return this._cache[text];
-            
-            // Thay thế tất cả các chuỗi {key} bằng giá trị dịch
-            const result = text.replace(/\{(.*?)\}/g, (match, key) => {
-                return this.getText(key.trim());
+
+            // Only match valid identifier keys ([A-Za-z_][\w]*) — avoids eating
+            // braces in unrelated content like VisuMZ "{{%1}}" timestamps,
+            // "{2026.5.25 15:39:53}" date stamps, or JSON-like text.
+            // If the key isn't found in the dictionary, leave the original
+            // text intact instead of unwrapping the braces (non-destructive).
+            const dict = this._data[this._locale];
+            const result = text.replace(/\{([A-Za-z_][\w]*)\}/g, (match, key) => {
+                if (dict && Object.prototype.hasOwnProperty.call(dict, key)) {
+                    return dict[key];
+                }
+                return match;
             });
             this._cache[text] = result;
             return result;
@@ -364,16 +372,48 @@ if (!Imported.KB_Core) {
     }
 
     // --- 2. INTEGRATION ---
+    // Process {tag} AFTER the base handler runs, so \N[n] / \P[n] substitutions
+    // (which can inject raw {tag} placeholders from data/Actors.json) get a
+    // second pass and the placeholder is resolved to the localized name.
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function(text) {
+        text = _Window_Base_convertEscapeCharacters.call(this, text);
         if (text) text = KBLocalization.process(text);
-        return _Window_Base_convertEscapeCharacters.call(this, text);
+        return text;
+    };
+
+    // Translate actor names at the source. This covers drawActorName() in
+    // menus (which uses drawText() and bypasses convertEscapeCharacters) and
+    // any other code path that reads actor.name() directly.
+    const _Game_Actor_name = Game_Actor.prototype.name;
+    Game_Actor.prototype.name = function() {
+        return KBLocalization.process(_Game_Actor_name.call(this));
+    };
+
+    // Same treatment for nicknames and class names — they may contain {tags}.
+    const _Game_Actor_nickname = Game_Actor.prototype.nickname;
+    Game_Actor.prototype.nickname = function() {
+        return KBLocalization.process(_Game_Actor_nickname.call(this));
+    };
+
+    const _Game_Actor_profile = Game_Actor.prototype.profile;
+    Game_Actor.prototype.profile = function() {
+        return KBLocalization.process(_Game_Actor_profile.call(this));
     };
 
     const _Window_Command_addCommand = Window_Command.prototype.addCommand;
     Window_Command.prototype.addCommand = function(name, symbol, enabled, ext) {
         if (name) name = KBLocalization.process(name);
         _Window_Command_addCommand.call(this, name, symbol, enabled, ext);
+    };
+
+    // Catch-all: any text drawn via drawText() (class names, skill names, state
+    // names, menus, etc.) gets one pass through the localizer. process() returns
+    // input unchanged when it doesn't contain '{', so non-tag text is free.
+    const _Window_Base_drawText = Window_Base.prototype.drawText;
+    Window_Base.prototype.drawText = function(text, x, y, maxWidth, align) {
+        if (typeof text === 'string') text = KBLocalization.process(text);
+        _Window_Base_drawText.call(this, text, x, y, maxWidth, align);
     };
 
     // --- 3. OPTIONS MENU ---
