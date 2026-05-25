@@ -1,0 +1,13 @@
+Key,vi,en
+lang_name,Tiếng Việt,English
+game_title,Huyền Thoại Bất Tử,Immortal Legend
+cmd_start,Bắt đầu hành trình,Start Journey
+cmd_continue,Tiếp tục,Continue
+cmd_options,Cấu hình,Options
+msg_welcome,"Chào mừng, nhà lữ hành!","Welcome, traveler!"
+item_potion,"Bình máu (Nhỏ), hồi 500HP","Potion (Small), heals 500HP"
+item_sword,Thanh Kiếm Gỗ,Wooden Sword
+desc_sword,"Kiếm tập luyện, sát thương thấp.","Practice sword, low damage."
+quest_01_name,Diệt chuột,Kill Rats
+quest_01_desc,Hãy giúp tôi tiêu diệt 5 con chuột.,Please help me kill 5 rats.
+dialogue_hero,"Này \N[1], cậu đi đâu đấy?","Hey \N[1], where are you going?"
