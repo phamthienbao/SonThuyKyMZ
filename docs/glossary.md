@@ -30,12 +30,14 @@ Note: the i18n keys `{sontinh}` and `{thuytinh}` are historical — they identif
 
 | Vietnamese | English | Implementation Status |
 |---|---|---|
-| Bóng Tối Gauge | Darkness Gauge (Hải's resource that overflows into loss-of-control) | **v1.0 shipped** — KB_BongToiGauge.js, State 28, Skills 490/491 |
-| Ngọc Hồn | Soul Jade (gating accessory across Ch.2–4) | **NOT BUILT** — not in Items.json |
+| Bóng Tối Gauge | Darkness Gauge (Hải's resource that overflows into loss-of-control) | **v1.1 shipped** — KB_BongToiGauge.js (sprite gauge via Sprite_KBBongToiGauge), State 28, Skills 490/491 |
+| Ngọc Hồn | Soul Jade (gating accessory across Ch.2–4) | **v1.0 built** — KB_NgocHonState.js tracks 3-shard convergence; item/armor data entries TBD |
 | Sách Ước | Wishing Book (out-of-combat resource, 1–2 uses/chapter) | **NOT BUILT** |
 | Summon System | 3 thần thú: Voi (Elephant), Gà (Chicken), Ngựa (Horse) — 1/battle each | **PARTIAL** — Voi & Gà exist as plain enemies, not summons |
 | Reputation System | NPC favor → discounts, dialogue, side quests | **NOT BUILT** |
 | ATB Gauge | Active Time Battle (vs current STB) | **NOT MATCHING** — STB plugin enabled, need to swap to ATB |
+| Convergence (Ngọc Hồn) | Moment when all 3 soul jade shards (Sơn/Thủy/Phong) align, triggering transformation from key item → equipment | **v1.0 built** — idempotent event chain in KB_NgocHonState.js |
+| Shard (Ngọc Hồn) | One of three soul jade pieces; tracked via switches `ngochon_son`/`thuy`/`phong` (ids 29/30/31) | **v1.0 built** |
 
 ## Key Items (GDD §8)
 

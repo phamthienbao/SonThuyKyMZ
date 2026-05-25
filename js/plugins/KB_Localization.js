@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc [v2.6] Hệ thống đa ngôn ngữ & Giao diện chọn ngôn ngữ (KB Edition).
+ * @plugindesc [v2.7] Hệ thống đa ngôn ngữ & Giao diện chọn ngôn ngữ (KB Edition).
  * @author KB (Dev)
  *
  * @help
@@ -34,10 +34,14 @@
  * - Đặt KB_Localization.js ở dưới KB_CoreEngine.js.
  *
  * 2. CHUẨN BỊ THƯ MỤC & DỮ LIỆU:
- * - Thư mục gốc: data/locales/
- * - Tạo các thư mục con trong "data/locales/" theo Mã ngôn ngữ (ví dụ: vi, en).
+ * - Thư mục gốc: <Data Root Folder>/ (mặc định: locales/, ở project root,
+ *   KHÔNG phải trong data/).
+ * - Tạo các thư mục con theo Mã ngôn ngữ (ví dụ: vi, en).
  * - Đặt các file dịch (chung tên) vào các thư mục tương ứng.
- * (Ví dụ: data/locales/vi/General.csv, data/locales/en/General.csv)
+ *   Ví dụ: locales/vi/General.csv, locales/en/General.csv
+ * - Tuỳ chọn: file CHUNG đa cột (tag;en;vi;...) đặt ngay tại Data Root Folder.
+ *   Khai báo trong param "Shared Files" để plugin tải 1 lần và pick đúng cột
+ *   cho mỗi locale. Ví dụ: locales/charactor.csv chứa cả en + vi.
  *
  * 3. CẤU HÌNH PLUGIN MANAGER:
  * - **Available Locales**: Điền các mã ngôn ngữ (ví dụ: vi, en).
@@ -80,9 +84,15 @@
  * @default CSV
  *
  * @param Data Files
- * @text Tên File Dữ liệu chung
- * @desc Nhập TÊN các file dữ liệu, cách nhau bằng dấu phẩy (Ví dụ: General, Quests). KHÔNG cần điền .csv/.json.
+ * @text Tên File Dữ liệu (per-locale)
+ * @desc Tên file ở <root>/<locale>/<file>.csv, cách nhau bằng dấu phẩy. KHÔNG cần điền đuôi mở rộng.
  * @default Languages
+ * @type string
+ *
+ * @param Shared Files
+ * @text Tên File Dữ liệu (shared, đa cột)
+ * @desc Tên file CSV đa cột ở thẳng <root>/<file>.csv (tag;en;vi;...). Cách nhau bằng dấu phẩy.
+ * @default main, title, charactor
  * @type string
  *
  * @param CSV Delimiter
@@ -131,10 +141,12 @@ if (!Imported.KB_Core) {
     const csvDelimiter = (params['CSV Delimiter'] || ';').trim()[0] || ';';
 
     const dataFilesStr = params['Data Files'] || 'Languages';
+    const sharedFilesStr = params['Shared Files'] || 'main, title, charactor';
     const localesStr = params['Available Locales'] || 'vi,en';
-    
+
     // Tách thành mảng, loại bỏ khoảng trắng, và thêm đuôi mở rộng
     const dataFiles = dataFilesStr.split(',').map(f => f.trim()).filter(f => f.length > 0).map(f => f + fileExtension);
+    const sharedFiles = sharedFilesStr.split(',').map(f => f.trim()).filter(f => f.length > 0).map(f => f + fileExtension);
     const availableLocales = localesStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
 
     const showOnTitle = KB.Utils.isTrue(params['Show on Title']);
@@ -158,11 +170,13 @@ if (!Imported.KB_Core) {
         get locale() { return this._locale; }
 
         loadData() {
-            // Duyệt qua tất cả các ngôn ngữ khả dụng để tải file
+            // Per-locale files: <root>/<locale>/<fileName>.
+            // (Path bug fix v2.7 — no more hardcoded "data/" prefix. The root
+            // folder is now exactly what the user typed; "locales" means the
+            // project-root locales/ folder.)
             this._availableLocales.forEach(locale => {
                 dataFiles.forEach(fileName => {
-                    // Xây dựng đường dẫn file: data/[Data Root Folder]/[locale]/[fileName]
-                    const url = `data/${dataRootFolder}/${locale}/${fileName}`;
+                    const url = `${dataRootFolder}/${locale}/${fileName}`;
                     if (dataType === 'CSV') {
                         this.loadCSV(url, locale);
                     } else if (dataType === 'JSON') {
@@ -170,6 +184,20 @@ if (!Imported.KB_Core) {
                     }
                 });
             });
+
+            // Shared files: <root>/<fileName>. Multi-column CSVs (tag;en;vi;...)
+            // sit at the root and contain all locales in one file. We issue
+            // one XHR per locale because parseCSV() picks the column matching
+            // the target locale. JSON shared files aren't supported here —
+            // use per-locale folders for JSON.
+            if (dataType === 'CSV') {
+                sharedFiles.forEach(fileName => {
+                    const url = `${dataRootFolder}/${fileName}`;
+                    this._availableLocales.forEach(locale => {
+                        this.loadCSV(url, locale);
+                    });
+                });
+            }
         }
 
         loadJSON(url, locale) {

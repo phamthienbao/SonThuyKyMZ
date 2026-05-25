@@ -2,6 +2,64 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-25 — Bóng Tối Gauge: identify Hải's window via placeGauge (v1.4)
+
+- Live diagnostics revealed VisuMZ_3_SideviewBattleUI does NOT store the actor on `Window_SideviewUiBattleStatus._actor` (all 4 instances report `_actor: undefined`). v1.3's finder relied on that field and matched nothing, leaving the overlay invisible.
+- v1.4 reintroduces a tiny `placeGauge` hook whose sole job is to remember which window VisuMZ called `placeGauge(haiActor, ...)` on. The overlay's position-tracking in `Scene_Battle.update` now reads `scene._kbHaiWindow` (set by the hook) instead of probing window fields.
+- The gauge is still rendered as a scene-level overlay (not added inside the window) so the v1.2 clipping issue does not return.
+
+## 2026-05-25 — KB_Localization v2.7: path fix + shared CSVs
+
+- **Root cause of the missing-CSV warnings and unresolved `{thuytinh}` etc.**: line 165 of KB_Localization built URLs as `data/${dataRootFolder}/${locale}/${fileName}`, hardcoding a `data/` prefix on top of the configured root. The user's `Data Root Folder: locales` therefore resolved to `data/locales/`, but the actual CSV files live at project-root `locales/` (matching CLAUDE.md's spec).
+- Dropped the `data/` prefix. The plugin now respects `Data Root Folder` verbatim — `locales` means `locales/`.
+- Added new param `Shared Files` (default `main, title, charactor`) for top-level multi-column CSVs (`tag;en;vi;…` format). One XHR per locale fires for each shared file; `parseCSV()` already picks the matching column. This is what makes `{thuytinh}` → "Giang Hải" resolve, since the mapping lives in `locales/charactor.csv` at the root, not in any per-locale folder.
+- Updated help block to reflect the actual layout (project-root `locales/`, not `data/locales/`).
+- File migration: copied `Quest.csv` (vi+en) and `General.csv` (en) from `data/locales/` into `locales/` since they were missing there. `data/locales/` left intact for now; can be deleted once the user confirms the new path works.
+- Known leftover: `Exported_Text.csv` is in the user's `Data Files` param but doesn't exist anywhere — plugin will keep logging a warning until removed from Plugin Manager.
+
+## 2026-05-25 — Bóng Tối Gauge: scene-level overlay (v1.3)
+
+- v1.2 confirmed via live diagnostics: gauge sprite WAS created (attached to `Window_SideviewUiBattleStatus` for Hải, visible=true, x=78, y=100), but the host window's height is 105 and contains a mask — so the gauge at y=100 with height=32 was clipped out of view.
+- v1.3 abandons in-window placement entirely. The gauge is now a `Scene_Battle` child sprite (no window mask), repositioned each frame to track Hải's `Window_SideviewUiBattleStatus` via the new `_kbFindHaiStatusWindow` helper. Opacity follows the panel's opacity so fade-in/out animations stay in sync.
+- New params: `gaugeWidth` (default 160), `gaugeOffsetX` (relative to Hải's window left), `gaugeOffsetY` (relative to Hải's window bottom; positive = below).
+- Bitmap width now comes from `P.gaugeWidth` via `bitmapWidth()` override — overlay is no longer bound to the 105px window.
+
+## 2026-05-25 — Bóng Tối Gauge: hook on placeGauge (v1.2)
+
+- v1.1's placeBasicGauges hook never fired in actual battles — confirmed VisuMZ_3_SideviewBattleUI bypasses placeBasicGauges entirely (0 references in the plugin) and calls the lower-level `placeGauge` directly per gauge type.
+- Switched the hook to `Window_StatusBase.prototype.placeGauge`. Fires once per hp/mp/tp call; we track the deepest y seen for the actor and append the BT gauge one `gaugeLineHeight` below it after the "last" type ("tp" if optDisplayTp, else "mp").
+- Catches both default `Window_BattleStatus` (which still goes through placeGauge under the hood) and VisuMZ Sideview Battle UI.
+
+## 2026-05-25 — KB_TitleCommands v2.8 (safe fixes)
+
+Functional bugs only — structure untouched, behavior preserved.
+
+- Fixed `@base KB_Core` annotation + `Imported.KB_Core` check → `KB_CoreEngine` (real plugin name). Removes the spurious "base plugin missing" warning on every boot.
+- Fixed three `for (i = 0; …)` loops that were leaking `window.i` every frame in title-screen update paths (`createTitlePictureCommands`, `checkTPicCom`, `updateTComMouseIsOnPic`). Would collide with any other script using a bare `i`.
+- Guarded `TpictureCom.getData()` against null `_orgXY` — happens when a title menu has 7+ entries but only 6 `Command Pos N` params are defined. Now warns + hides instead of crashing the title.
+- Null-checked `_backSprite1/_backSprite2` before assigning bitmaps in `changeBackgroundsToPhase2` (defensive — if another plugin removes the back sprites, we no-op instead of throwing).
+- Not addressed (deferred): KB namespace pollution, missing IIFE, stringly-typed booleans, dead `z` assignments — flagged but kept for a future pass.
+
+## 2026-05-25 — Bóng Tối Gauge UI: real gauge sprite (v1.1)
+
+- `KB_BongToiGauge` bumped to v1.1. The v1.0 implementation hooked `Window_StatusBase.prototype.drawActorName` to append `[BT:X/100]` to Hải's name — but `VisuMZ_3_SideviewBattleUI` replaces the default battle status window with sprite-based name rendering, so the suffix never appeared in actual battles.
+- Replaced the text-suffix hook with `Sprite_KBBongToiGauge`, a `Sprite_Gauge` subclass whose `currentValue()` / `currentMaxValue()` read from `KB.BongToi`. Gauge colors shift from purple → orange → red as fill approaches max.
+- The gauge is placed via `Window_StatusBase.prototype.placeBasicGauges` (core RMMZ, not affected by VisuMZ's minification). It sits one `gaugeLineHeight` below TP for Hải only, in `Scene_Battle` only.
+- This works for both the default `Window_BattleStatus` and VisuMZ's `Window_SideviewUiBattleStatus` since both extend `Window_StatusBase`.
+- `plugins.js` retains a cached "(v1.0)" description string — will refresh next time the user saves Plugin Manager; not load-blocking.
+
+## 2026-05-25 — Ngọc Hồn convergence system
+
+- Built `js/plugins/KB_NgocHonState.js` (v1.0). Custom plugin that:
+  - Watches the 3 shard switches (`ngochon_son`/`thuy`/`phong` = ids 29/30/31)
+  - Keeps `ngochon_count` (var 23) synced with the number of switches ON (0..3)
+  - On all-3-ON convergence: removes a configured key item, adds a configured accessory armor, auto-equips on a configured actor/slot, plays optional SE, reserves an optional Common Event
+  - Idempotent — runs the convergence chain once, gated by an optional "done" switch
+  - Catch-up check on `Scene_Map.start` (handles savefiles where switches were flipped before the plugin was active)
+  - Plugin commands: CollectShard, SetShard, ForceConvergence, ResetAll (debug), CheckNow
+  - Pure `$gameSwitches` + `$gameVariables` state — save/load is automatic
+- **Wiring still TODO**: create the Ngọc Hồn key item (Items.json) and Ngọc Hồn accessory (Armors.json), then set `keyItemId` / `accessoryArmorId` / `autoEquipActorId` / `convergenceCommonEventId` params in the Plugin Manager. Plugin no-ops on unconfigured IDs so it's safe to enable now and wire later.
+
 ## 2026-05-25 — Bóng Tối Gauge system (Hải's signature mechanic)
 
 - Built `js/plugins/KB_BongToiGauge.js` (v1.0). Custom plugin that:

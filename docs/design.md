@@ -24,8 +24,8 @@ Prologue → Ch.1 (split path Tuấn/Hải) → Ch.2 (party of 2) → Ch.3 (part
 | **ATB Gauge** | Swap STB → `VisuMZ_2_BattleSystemATB` (or CTB as middle ground). SPD stat drives fill. | **Pending D1** |
 | **Element Triangle** | Use System.json elements 5/6/2/7/8/9. Skill `damage.elementId` + enemy weakness traits. ×1.5 weakness via VisuMZ default. | Engine ready, content TBD |
 | **Party (fixed 3)** | `partyMembers: [tuanId, haiId, hoaId]`. Disable formation menu via `optExtraExp`/VisuMZ_3_PartySystem (or just hide). | Pending D2 |
-| **Bóng Tối Gauge** | Custom KB_BongToiGauge plugin. Variable `bongtoi_gauge` 0–100. State 28 (Bóng Tối Bùng Phát) triggers overflow; Long Vương Chi Nộ (skill 490) fills, Tĩnh Tâm (skill 491) decrements. Battle UI suffix + plugin commands. | **v1.0 built** |
-| **Ngọc Hồn** | Key item (Ch.2) → accessory (Ch.4-END). Track collection via 3 switches: `ngochon_son`, `ngochon_thuy`, `ngochon_phong`. Common event auto-converts when all three on. | **Not built** |
+| **Bóng Tối Gauge** | Custom KB_BongToiGauge plugin. Variable `bongtoi_gauge` 0–100. State 28 (Bóng Tối Bùng Phát) triggers overflow; Long Vương Chi Nộ (skill 490) fills, Tĩnh Tâm (skill 491) decrements. Rendered as `Sprite_KBBongToiGauge` (MZ gauge sprite) placed below TP in battle status (works with both default and VisuMZ SideviewBattleUI). | **v1.1 shipped** (v1.0 text-suffix approach replaced by sprite gauge) |
+| **Ngọc Hồn** | Key item (Ch.2) → accessory (Ch.4-END). Track collection via 3 switches: `ngochon_son`, `ngochon_thuy`, `ngochon_phong`. Plugin auto-converts when all three on. | **v1.0 built** (item/armor IDs TBD) |
 | **Sách Ước** | Out-of-combat key item. Per-chapter use counter (variable). Three modes: party heal, item summon, gate open. Menu integration via VisuMZ_1_MainMenuCore. | **Not built** |
 | **Summon System** | Each Thần Thú = a skill (single-use per battle). Implement via Skill `Effect: Common Event` calling AoE damage + buff. Track availability per-battle via state. | **Not built** |
 | **Reputation** | Per-NPC variable `rep_<id>`. Branching dialogue checks rep. Shop discounts via item price modifiers. | **Not built** |
@@ -86,7 +86,7 @@ Prologue → Ch.1 (split path Tuấn/Hải) → Ch.2 (party of 2) → Ch.3 (part
 
 ### Layer 5 — Custom (to be built)
 - **`KB_BongToiGauge.js`** — ✓ Hải's darkness meter (v1.0 shipped)
-- **`KB_NgocHonState.js`** — Soul Jade tracking
+- **`KB_NgocHonState.js`** — ✓ Soul Jade tracking + 3-shard convergence (v1.0 shipped)
 - **`KB_SummonSystem.js`** — Thần Thú once-per-battle
 - **`KB_Reputation.js`** — NPC rep tracking + shop modifiers
 - (Optionally) `KB_MoralChoice.js` — central tracker for ending paths

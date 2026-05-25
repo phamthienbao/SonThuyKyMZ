@@ -63,15 +63,21 @@ See `docs/proposal.md` for full context.
 
 ## Custom systems — KB plugins to build
 
-- [x] (P1) (L) Build `KB_BongToiGauge.js` plugin (Hải's darkness meter) — v1.0 shipped 2026-05-25
+- [x] (P1) (L) Build `KB_BongToiGauge.js` plugin (Hải's darkness meter) — v1.1 shipped 2026-05-25
   - Notetags `<bongtoi: +N>` / `<bongtoi: reset>` on skills/items/states
   - Low-HP fill threshold (configurable)
   - Auto-applies overflow state when gauge ≥ max
-  - Battle UI: `[BT:X/Max]` suffix on Hải's name
+  - Battle UI: Sprite_KBBongToiGauge (MZ gauge sprite) positioned below TP in status window
   - Plugin commands for event-driven control
-  - Pending: enable in Plugin Manager + first playtest
+  - v1.1 fix: replaced v1.0 drawActorName text-suffix hook with sprite gauge (text-suffix never fired with VisuMZ_3_SideviewBattleUI enabled)
 - [ ] (P1) (S) Ch.5 trigger for `tinh_tam_doubled` switch (Tĩnh Tâm 2x effectiveness late-game)
-- [ ] (P1) (L) Build `KB_NgocHonState.js` (3-switch convergence → accessory equip)
+- [x] (P1) (L) Build `KB_NgocHonState.js` (3-switch convergence → accessory equip) — v1.0 shipped 2026-05-25
+  - Watches `ngochon_son/thuy/phong` switches (29/30/31)
+  - Syncs `ngochon_count` var (0..3); auto-fires convergence at 3
+  - Configurable: key item to remove, accessory armor to add, actor + slot for auto-equip, fanfare SE, common event
+  - Idempotent via `convergenceDoneSwitchId`; catch-up check on `Scene_Map.start`
+  - Plugin commands: CollectShard, SetShard, ForceConvergence, ResetAll, CheckNow
+  - Pending: enable in Plugin Manager + create Ngọc Hồn key item + accessory armor entries in data, then wire IDs into plugin params
 - [ ] (P1) (L) Build `KB_SummonSystem.js` (Thần Thú once-per-battle skills)
 - [ ] (P2) (M) Build `KB_Reputation.js` (NPC rep tracking, shop discounts, dialogue gating)
 - [ ] (P3) (M) Build `KB_MoralChoice.js` (central tracker for ending paths)

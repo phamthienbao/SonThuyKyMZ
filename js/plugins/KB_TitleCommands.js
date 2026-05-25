@@ -4,10 +4,10 @@
 
 /*:
  * @target MZ
- * @plugindesc (v2.7 Fix) Add Custom Text Content for "Press Start" & Fix Cursor X.
+ * @plugindesc (v2.8) Add Custom Text Content for "Press Start" & Fix Cursor X.
  * @author KB
- * @base KB_Core
- * @orderAfter KB_Core
+ * @base KB_CoreEngine
+ * @orderAfter KB_CoreEngine
  * * @help  
  * =============================================================================
  * +++ KB - Title Picture Commands (v2.7 Fix) +++
@@ -257,10 +257,10 @@
 var Imported = Imported || {};
 Imported.KB_TitleCommands = true;
 
-if (Imported.KB_Core && KB.Utils) {
-    // Safe
-} else {
-    console.warn("KB_TitleCommands requires KB_CoreEngine.");
+// Note: the plugin file is KB_CoreEngine.js but the Imported flag it sets
+// is `KB_Core` (legacy name). Check the flag, not the file name.
+if (!Imported.KB_Core) {
+    console.warn("KB_TitleCommands requires KB_CoreEngine — place KB_CoreEngine above this plugin in the manifest.");
 }
 
 var KB = KB || {};
@@ -489,10 +489,10 @@ Scene_Title.prototype.updatePhase0 = function() {
 // * Change Backgrounds to Phase 2
 //==============================
 Scene_Title.prototype.changeBackgroundsToPhase2 = function() {
-    if (KB.title_p2_bg1 && KB.title_p2_bg1 !== "") {
+    if (this._backSprite1 && KB.title_p2_bg1 && KB.title_p2_bg1 !== "") {
         this._backSprite1.bitmap = ImageManager.loadTitle1(KB.title_p2_bg1);
     }
-    if (KB.title_p2_bg2 && KB.title_p2_bg2 !== "") {
+    if (this._backSprite2 && KB.title_p2_bg2 && KB.title_p2_bg2 !== "") {
         this._backSprite2.bitmap = ImageManager.loadTitle2(KB.title_p2_bg2);
     }
 };
@@ -543,7 +543,7 @@ Scene_Title.prototype.createTitlePictureCommands = function() {
     this._TpictureCom = [];
     this._tComTouch = [TouchInput.x,TouchInput.y];
     this._picComIndex = this._commandWindow._index;
-    for (i = 0; i < this._commandWindow._list.length; i++){
+    for (var i = 0; i < this._commandWindow._list.length; i++){
          this._TpictureCom[i] = new TpictureCom(this._commandWindow,i);
          this._TpictureCom[i].z = 300;
          this._titleField3.addChild(this._TpictureCom[i]);
@@ -615,7 +615,7 @@ Scene_Title.prototype.cursorMoveto = function(value,real_value,speed) {
 };
 
 Scene_Title.prototype.checkTPicCom = function() {
-    for (i = 0; i < this._TpictureCom.length; i++){
+    for (var i = 0; i < this._TpictureCom.length; i++){
          if (this._TpictureCom[i].isOnPicCom()) {
              this._commandWindow._index = i;
              if (this._picComIndex == this._commandWindow._index) {             
@@ -650,7 +650,7 @@ Scene_Title.prototype.updateComSideInput = function() {
 
 Scene_Title.prototype.updateTComMouseIsOnPic = function() {
     var picID = -1;
-    for (i = 0; i < this._TpictureCom.length; i++){
+    for (var i = 0; i < this._TpictureCom.length; i++){
          if (this._TpictureCom[i].isOnPicCom()) {
              this._commandWindow._index = i;
              if (this._picComIndex != this._commandWindow._index) {             
@@ -729,8 +729,15 @@ TpictureCom.prototype.getData = function() {
     this.anchor.y = 0.5;
     this._cw = this.bitmap.width;
     this._ch = this.bitmap.height / 2;
-    var fx = (Graphics.width - 816) / 2; 
-    var fy = (Graphics.height - 624) / 2;   
+    var fx = (Graphics.width - 816) / 2;
+    var fy = (Graphics.height - 624) / 2;
+    if (!this._orgXY) {
+        // Missing Command Pos N param for this command index — hide and bail
+        // instead of crashing the title screen.
+        console.warn("[KB_TitleCommands] Missing 'Command Pos " + (this._index + 1) + "' — sprite hidden.");
+        this._orgXY = [-9999, -9999];
+        this.visible = false;
+    }
     this._orgXY[0] += (this._cw / 2) + fx;
     this._orgXY[1] += fy;
     this.x = this._orgXY[0];
