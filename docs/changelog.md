@@ -2,6 +2,56 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-26 — KB_MainMenuVisual v0.6.21: nuke stray Window_Base ghost — RESOLVED
+
+Debug dump from v0.6.20 nailed it: the empty rectangle is a raw `Window_Base` instance at `(240, 641) 536×60`, visible=true, no `_backgroundType` set, no specific subclass. Some other plugin is instantiating `new Window_Base(...)` directly without subclassing. Given the position/size, likely a leftover from CGMZ_MapNameWindow, IgnisItemGoldPopup, or a similar map-side popup that doesn't tear down on scene transition.
+
+- **In `Scene_MenuBase.start`** (after `_kbNukeAssist`), walk `this._windowLayer.children` and apply visible=false + setBackgroundType(2) + move(x, y, 0, 0) to any child whose `constructor.name === 'Window_Base'` AND whose bottom edge sits within 200 px above the hint.
+- Safe because we never instantiate raw `Window_Base` ourselves — `KB_ActorCardMenu` extends `Window_StatusBase`, `Window_KBJournalCommand` extends `Window_Command`, etc. The class-name check never catches our own widgets.
+- Try/catch wrapped with `console.error` fallback.
+- v0.6.20's debug ghost-dump remains in place so any future ghost-class can still be diagnosed by name.
+
+This closes the 5-iteration ghost-frame thread (v0.6.17–v0.6.21).
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.20: ghost-frame iteration #4 — dimension nuke + debug instrumentation
+
+Iteration #4 on the persistent ghost-frame rectangle issue. Previous rounds (v0.6.17–v0.6.19) applied various fixes; the rectangle persisted. Two more things this round:
+
+- **Apply `move(x, y, 0, 0)` to Playtime/Variable/Gold trio** in the HEADER_HIDE_BARS block — v0.6.18 had only added `setBackgroundType(2)` to them. Now both fixes are applied, matching the v0.6.19 treatment on the button assist. 0×0 dimensions guarantee no pixels rendered, regardless of frame sprite state.
+- **One-shot debug dump** on Scene_MenuBase.start (gated on Debug Logging plugin param). Walks `this._windowLayer.children` and warns every child whose bottom edge sits within 100px of the hint top. For each suspect, logs: class name, x/y/w/h, visible state, and _backgroundType. If the rectangle persists after the dimension-nuke, the user can flip Debug Logging on in Plugin Manager, open the menu, and check the console to identify the exact culprit.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.19: ghost frame fix continued — nuke assist dims + hook start()
+
+Empty rectangle was still visible after v0.6.17 + v0.6.18. New investigation reveals two possible failure modes:
+1. **Timing**: VisuMZ_0_CoreEngine likely creates the button assist window mid-`create()` AFTER our Scene_MenuBase.create alias has already run, so our `setBackgroundType(2)` never reaches it.
+2. **Refresh leak**: even when we do set type 2, VisuMZ's update loop may refresh the frame each tick.
+
+Fix in `js/plugins/KB_MainMenuVisual.js`:
+- Factored the assist-hide logic into a `_kbNukeAssist(scene)` helper that does `visible=false` + `deactivate()` + `setBackgroundType(2)` + `move(x, y, 0, 0)` — the 0×0 dimensions guarantee nothing renders regardless of frame state.
+- Called from the existing Scene_MenuBase.create alias AND from a new Scene_MenuBase.start alias. start() fires once after the full create chain finishes, so the assist window is guaranteed to exist by then.
+- Belt-and-suspenders: even if the frame leaks, a 0-dimension window has no pixels.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.18: ghost frame fix continued — Playtime/Variable/Gold windows
+
+v0.6.17 added `setBackgroundType(2)` to `_buttonAssistWindow` but the ghost rectangle was still visible. The leaking frame is one (or all) of the three other windows we hide on Scene_Menu: VisuMZ MainMenuCore's `_playtimeWindow`, `_variableWindow`, and `_goldWindow` — we suppress them in the v0.5.1 `HEADER_HIDE_BARS` block because the header band already shows that info.
+
+- Same one-line fix applied to all three windows in the `HEADER_HIDE_BARS` loop: in addition to `hide()` + `deactivate()`, now also `setBackgroundType(2)`. Frame sprite drops; ghost rectangle gone.
+- Scoped to Scene_Menu only (since these three windows only exist on Scene_Menu in MainMenuCore's setup).
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.17: kill ghost frame above the bottom hint
+
+User-reported screenshot: a thin empty rectangle visible above the centered `[Z] Chọn  [X] Hồi` hint band on every menu scene. Root cause: when we hide VisuMZ's button-assist window in the v0.6.7 `Scene_MenuBase.create` alias, we only set `visible = false` + `deactivate()`. VisuMZ's windowskin frame sprite kept rendering as a hairline outline, leaking through above our hint.
+
+- Added `this._buttonAssistWindow.setBackgroundType(2)` to the hide block — same fix we used on the stock status window in v0.5.5 (where `.hide()` alone wasn't enough). `setBackgroundType(2)` drops the windowskin frame entirely; combined with `visible = false` the assist is fully suppressed.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.16: fix Formation (Đội Hình) freeze
+
+Same-shape regression as the v0.6.3 Skill/Equip/Status freeze, missed because Formation uses a separate `Scene_Menu.commandFormation` entry point (not `commandPersonal`). When the player clicked Đội Hình, `_statusWindow` activated for actor-swap selection — but we'd hidden it since v0.4, so input was captured invisibly and the menu looked frozen.
+
+- **Three new aliases** on `Scene_Menu`: `commandFormation` shows the stock status window and hides our party column; `onFormationCancel` detects the exit-formation branch (status window deactivated post-call, vs the clear-pending branch where it stays active) and hides + restores; `onFormationOk` not aliased because status stays active in both swap branches.
+- The cancel alias also calls `this._kbPartyColumn.refresh()` after restoring visibility so the column reflects the new party order if a swap happened.
+- All gated on `ENABLE_PARTY && HIDE_STOCK_STATUS`; defensive guards on `_kbPartyColumn` and `refresh` presence.
+
 ## 2026-05-26 — KB_MainMenuVisual v0.6.15: runtime-patch ElementStatusCore General-tab DrawJS for DP fit
 
 User asked to move the HP/MP/TP/DP gauge stack up so DP isn't pressed against the bottom edge of the panel. The General tab's layout comes from `VisuMZ_1_ElementStatusCore`'s user-configurable `DrawJS` callback, which reserves `basicDataHeight = lineHeight * 6.5` for the actor info block (name + level + class + icons + HP/MP/TP = ~6.5 rows). When KB_BongToiGauge's chain hook adds DP as a 4th gauge, it lands outside that reserved area.

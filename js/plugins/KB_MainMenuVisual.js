@@ -1,9 +1,9 @@
 //=============================================================================
-// KB_MainMenuVisual.js  v0.6.15
+// KB_MainMenuVisual.js  v0.6.21
 //=============================================================================
 /*:
  * @target MZ
- * @plugindesc [v0.6.15] Sumi-e ink-wash main menu — General-tab DrawJS patch for DP gauge fit.
+ * @plugindesc [v0.6.21] Sumi-e ink-wash main menu — suppress stray Window_Base ghost.
  * @author KB
  *
  * @help
@@ -1400,15 +1400,24 @@ Imported.KB_MainMenuVisual = true;
     // Journal / FastTravel / Encyclopedia / etc.) — replaces
     // VisuMZ's right-aligned button assist for visual consistency.
     //==========================================================
+    const _kbNukeAssist = function(scene) {
+        const w = scene && scene._buttonAssistWindow;
+        if (!w) return;
+        w.visible = false;
+        w.deactivate();
+        w.setBackgroundType(2);
+        // visible=false + backgroundType=2 should be enough, but VisuMZ
+        // refreshes the frame in update(), so the rectangle can leak
+        // back. 0×0 dimensions guarantee nothing renders.
+        if (typeof w.move === 'function') w.move(w.x, w.y, 0, 0);
+    };
+
     const _SceneMenuBase_create = Scene_MenuBase.prototype.create;
     Scene_MenuBase.prototype.create = function() {
         _SceneMenuBase_create.call(this);
         if (!USE_CUSTOM_HINT) return;
         try {
-            if (this._buttonAssistWindow) {
-                this._buttonAssistWindow.visible = false;
-                this._buttonAssistWindow.deactivate();
-            }
+            _kbNukeAssist(this);
             if (!this._kbHint) {
                 this._kbHint = new KB_MenuButtonHint();
                 this.addChild(this._kbHint);
@@ -1416,6 +1425,77 @@ Imported.KB_MainMenuVisual = true;
         } catch (error) {
             console.error('[KB_MainMenuVisual] Scene_MenuBase hint init failed:',
                 error, error && error.stack);
+        }
+    };
+
+    // Re-apply at start() in case VisuMZ creates / re-shows the assist
+    // window after our create() hook ran. start() fires once after the
+    // full create chain finishes, so the window definitely exists by
+    // then. Belt-and-suspenders with the create-hook nuke.
+    const _SceneMenuBase_start = Scene_MenuBase.prototype.start;
+    Scene_MenuBase.prototype.start = function() {
+        _SceneMenuBase_start.call(this);
+        if (!USE_CUSTOM_HINT) return;
+        _kbNukeAssist(this);
+        // v0.6.21: nuke any raw `Window_Base` instances that have leaked
+        // into the bottom band. The debug dump in v0.6.20 caught one
+        // sitting at (240, 641) 536×60 — likely a leftover from a map
+        // popup plugin (CGMZ_MapNameWindow / IgnisItemGoldPopup style).
+        // We never create raw Window_Base ourselves — always subclass —
+        // so it's safe to suppress any exact-Window_Base ghost.
+        try {
+            const lyr = this._windowLayer;
+            if (lyr && lyr.children) {
+                const hintTop = Graphics.boxHeight - sy(HINT_H);
+                for (const ch of lyr.children) {
+                    if (!ch || !ch.constructor) continue;
+                    if (ch.constructor.name !== 'Window_Base') continue;
+                    if ((ch.height || 0) <= 0) continue;
+                    if (ch.y + ch.height < hintTop - 200) continue;
+                    ch.visible = false;
+                    if (typeof ch.setBackgroundType === 'function') {
+                        ch.setBackgroundType(2);
+                    }
+                    if (typeof ch.move === 'function') {
+                        ch.move(ch.x, ch.y, 0, 0);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[KB_MainMenuVisual] Window_Base ghost nuke failed:', e);
+        }
+        // v0.6.20: one-shot debug dump of every child window with
+        // non-zero dimensions in the bottom 100 px above the hint.
+        // Helps identify what ghost widget is still rendering when
+        // the prior fixes didn't catch it. Only fires when Debug
+        // Logging is on.
+        if (DEBUG && !this._kbGhostDumpDone) {
+            this._kbGhostDumpDone = true;
+            try {
+                const hintTop = Graphics.boxHeight - sy(HINT_H);
+                const lowerBand = hintTop - 100;
+                const lyr = this._windowLayer;
+                if (lyr && lyr.children) {
+                    console.warn('[KB_MainMenuVisual] === ghost-dump start ===',
+                        'hintTop=', hintTop, 'scanFrom=', lowerBand);
+                    for (const ch of lyr.children) {
+                        if (!ch) continue;
+                        const top = ch.y;
+                        const bot = ch.y + (ch.height || 0);
+                        if (bot > lowerBand && (ch.width || 0) > 0
+                            && (ch.height || 0) > 0) {
+                            console.warn('  ',
+                                (ch.constructor && ch.constructor.name) || '?',
+                                'x=', ch.x, 'y=', top,
+                                'w=', ch.width, 'h=', ch.height,
+                                'visible=', ch.visible,
+                                'backgroundType=', ch._backgroundType);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[KB_MainMenuVisual] ghost-dump failed:', e);
+            }
         }
     };
 
@@ -1434,7 +1514,18 @@ Imported.KB_MainMenuVisual = true;
                 if (HEADER_HIDE_BARS) {
                     for (const key of ['_playtimeWindow', '_variableWindow', '_goldWindow']) {
                         const w = this[key];
-                        if (w) { w.hide(); w.deactivate(); }
+                        if (w) {
+                            w.hide();
+                            w.deactivate();
+                            w.setBackgroundType(2);
+                            // v0.6.20: same dimension-nuke as the assist
+                            // window (v0.6.19). visible=false +
+                            // backgroundType=2 still left a frame leaking
+                            // on the bottom band; 0×0 guarantees nothing.
+                            if (typeof w.move === 'function') {
+                                w.move(w.x, w.y, 0, 0);
+                            }
+                        }
                     }
                 }
                 // Custom hint is added by the Scene_MenuBase.create alias
@@ -1522,6 +1613,34 @@ Imported.KB_MainMenuVisual = true;
             if (this._kbPartyColumn) this._kbPartyColumn.visible = true;
         }
         _SceneMenu_onPersonalOk.call(this);
+    };
+
+    // Formation (Đội Hình) uses the same status window for actor-swap
+    // selection. Same freeze pattern as commandPersonal — hidden window
+    // captures input, player sees nothing. onFormationCancel has two
+    // branches: clear-pending (status stays active) vs exit-formation
+    // (status deactivates). Detect via post-call active state.
+    const _SceneMenu_commandFormation = Scene_Menu.prototype.commandFormation;
+    Scene_Menu.prototype.commandFormation = function() {
+        if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow) {
+            this._statusWindow.show();
+            if (this._kbPartyColumn) this._kbPartyColumn.visible = false;
+        }
+        _SceneMenu_commandFormation.call(this);
+    };
+
+    const _SceneMenu_onFormationCancel = Scene_Menu.prototype.onFormationCancel;
+    Scene_Menu.prototype.onFormationCancel = function() {
+        _SceneMenu_onFormationCancel.call(this);
+        if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow
+            && !this._statusWindow.active) {
+            // Exited formation mode (not just clearing pending).
+            this._statusWindow.hide();
+            if (this._kbPartyColumn) {
+                this._kbPartyColumn.visible = true;
+                if (this._kbPartyColumn.refresh) this._kbPartyColumn.refresh();
+            }
+        }
     };
 
     // Make the command column transparent when our ink-wash style is on, so

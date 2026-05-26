@@ -201,6 +201,53 @@ The three stub commands are now **disabled** (grayed out) in `Window_KBJournalCo
 
 ---
 
+## v0.6.17 Follow-Up: Button-assist ghost frame killed
+
+**Date:** 2026-05-26  
+**Issue:** User-reported screenshot showed a thin empty rectangle visible above the centered `[Z] Chọn  [X] Hồi` hint band on every menu scene.
+
+**Root cause:** When we hide VisuMZ's button-assist window in v0.6.7's `Scene_MenuBase.create` alias, we only set `visible = false` + `deactivate()`. The windowskin frame sprite kept rendering as a hairline outline, leaking through above our hint.
+
+**Fix (v0.6.17):** Added `setBackgroundType(2)` to the hide block. Same trick we use on the stock status window in v0.5.5 — `setBackgroundType(2)` drops the windowskin frame entirely. Combined with `visible = false` the assist is fully suppressed.
+
+**Verification checklist**
+- [ ] Open menu → no thin empty rectangle above the centered hint band on any menu scene
+- [ ] Open menu → Scene_Status (Trạng Thái) → no ghost frame visible above hint
+- [ ] Open menu → Scene_Skill (Kỹ Năng) → hint clean, no seams
+
+---
+
+## v0.6.16 Follow-Up: Formation (Đội Hình) freeze fix — missed-sibling regression
+
+**Date:** 2026-05-26  
+**Issue:** User reported a second freeze when selecting the Formation (Đội Hình) command from the main menu. After clicking it, the UI appeared frozen and unresponsive.
+
+**Root cause:** Same pattern as the v0.6.3 Skill/Equip/Status freeze, but **missed because Formation uses a separate entry point**. All five commands activate the stock status window for actor selection:
+- Skill / Equip / Status / ClassChange route through `Scene_Menu.commandPersonal()`
+- **Formation routes through a separate `Scene_Menu.commandFormation()`** (a distinct method in the MZ engine)
+
+v0.6.3–v0.6.5 aliased `commandPersonal()` to show the status window and hide the party column, but did **not** alias `commandFormation()`. When the player clicked Formation, the status window activated invisibly (we still hid it), and input was captured with no visual feedback — identical to the v0.6.3 freeze.
+
+**Fix (v0.6.16):**
+- **`Scene_Menu.prototype.commandFormation` aliased** — shows the stock status window and hides the party column (identical to the `commandPersonal` alias).
+- **`Scene_Menu.prototype.onFormationCancel` aliased** — detects the exit-formation branch by checking `!this._statusWindow.active` *after* the original runs. When exiting:
+  1. Re-hides the status window.
+  2. Restores party column visibility (`visible = true`).
+  3. Calls `this._kbPartyColumn.refresh()` so the column reflects any party reorder that occurred during the formation-swap session.
+- **`onFormationOk` NOT aliased** — status window stays active in both branches (clear-pending and do-swap), so no special handling needed on OK.
+- All three guarded by `ENABLE_PARTY && HIDE_STOCK_STATUS` with defensive guards on `_kbPartyColumn` and `refresh` presence.
+- **Window** still uses `backgroundType=2` (frames suppressed) for smooth UX.
+
+**Result:** Formation now behaves identically to Skill/Equip/Status — stock status window visible for actor selection, party column hidden; on cancel/return, party column restored with correct party order.
+
+**Verification checklist**
+- [ ] Open menu → Đội Hình → cursor visible, can move between actors
+- [ ] Select an actor to reorder → swap happens, selection highlights another actor
+- [ ] Cancel from actor selection → status window hides, menu returns to command list, party column reappears in new order
+- [ ] Test with 2-actor and 3-actor party to confirm reorder persists
+
+---
+
 ## v0.6.12 Follow-Up: ElementStatusCore discovered; drawText interception + placeGauge filter
 
 **Date:** 2026-05-26  
@@ -275,9 +322,103 @@ The three stub commands are now **disabled** (grayed out) in `Window_KBJournalCo
 
 ---
 
+## v0.6.19 Follow-Up: Ghost frame fix continued — timing miss + refresh leak hypotheses addressed
+
+**Date:** 2026-05-26  
+**Issue:** Rectangle still visible above the centered hint band after v0.6.17 + v0.6.18. Both previous fixes applied `setBackgroundType(2)` to suppress windowskin frames, but the ghost rectangle persisted.
+
+**New hypotheses:**
+1. **Timing:** VisuMZ_0_CoreEngine likely creates the button-assist window mid-`Scene_MenuBase.create()` AFTER our Scene_MenuBase.create alias has already run. Our hide call (`setBackgroundType(2)`) fires before the window even exists, so it never reaches the actual window instance.
+2. **Refresh leak:** Even when `setBackgroundType(2)` is called *after* the window is created, VisuMZ's `update()` loop may re-invoke `_refreshBack()` each frame, re-applying the frame sprite even though we disabled it.
+
+**Fix (v0.6.19 — belt-and-suspenders approach):**
+- Factored the assist-hide logic into a new `_kbNukeAssist(scene)` helper function. The helper does four things in sequence: `visible=false` + `deactivate()` + `setBackgroundType(2)` + `move(x, y, 0, 0)` (0×0 dimensions). Even if one approach fails, the 0×0 window has no pixels to render.
+- Helper is called from TWO places now:
+  1. **`Scene_MenuBase.create` alias (existing)** — catches the window if it exists early.
+  2. **NEW `Scene_MenuBase.start` alias** — fires once after the *entire* create chain has finished, guaranteeing the assist window is fully initialized by then (even if VisuMZ_0_CoreEngine creates it mid-chain).
+- Since `start()` runs after all child-class `create()` methods complete, the timing miss is eliminated. The 0×0 move() ensures refresh leak doesn't matter — nothing renders from a zero-dimension window.
+
+**Verification checklist**
+- [ ] Open menu on any map → centered hint band clean, no thin rectangle above it
+- [ ] Open menu → close → open again → no frame artifacts
+- [ ] Test across multiple scenes (Skill, Equip, Status, Item, Save, Journal, Quest, etc.)
+- [ ] Test on multiple maps with different backgrounds
+
+---
+
+## v0.6.18 Follow-Up: Ghost frame continued — Playtime/Variable/Gold windows
+
+**Date:** 2026-05-26  
+**Issue:** Rectangle still visible above the centered hint band after v0.6.17's fix. v0.6.17 added `setBackgroundType(2)` to the button-assist hide block, but the leaking frame persisted.
+
+**Root cause:** The real culprit was not the button-assist window — it was the three VisuMZ MainMenuCore windows suppressed in the `HEADER_HIDE_BARS` block:
+1. `_playtimeWindow` (displays playtime)
+2. `_variableWindow` (displays the tracked variable)
+3. `_goldWindow` (displays gold amount)
+
+These three are hidden on `Scene_Menu` via the existing `HEADER_HIDE_BARS` condition (v0.5.1), which calls `hide()` + `deactivate()` on each, but did **not** call `setBackgroundType(2)`. The windowskin frames persisted as hairline outlines, leaking through above the hint band.
+
+**Fix (v0.6.18):** Inside the `HEADER_HIDE_BARS` loop (within `Scene_Menu.create` alias), added `w.setBackgroundType(2)` alongside the existing `hide()` + `deactivate()`. All three windows' frame sprites are now suppressed; the rectangle is gone.
+
+**Scoping:** Only applied in Scene_Menu. These three windows only exist in MainMenuCore's setup and only on Scene_Menu, so the fix is narrow and safe.
+
+**Verification checklist**
+- [ ] Open menu on any map → centered hint band clean, no thin rectangle above it
+- [ ] Open menu → close menu → open again → no frame artifacts
+- [ ] Test on multiple maps with different backgrounds
+
+---
+
+## v0.6.20 Follow-Up: Ghost frame iteration #4 — dimension nuke + debug dump
+
+**Date:** 2026-05-26  
+**Issue:** Rectangle still visible above the centered hint band after v0.6.17–v0.6.19. Previous attempts using `setBackgroundType(2)` and dimension zeroing on button assist did not fully eliminate the frame.
+
+**Two more things this round:**
+1. **Extended dimension-nuke to Playtime/Variable/Gold windows:** v0.6.18 had added `setBackgroundType(2)` to the three VisuMZ MainMenuCore windows hidden in the `HEADER_HIDE_BARS` block, but did not apply `move(x, y, 0, 0)` to nuke their dimensions. Now both fixes are applied: the trio gets `setBackgroundType(2)` + `move(x, y, 0, 0)` (matching the v0.6.19 treatment on button assist). 0×0 dimensions guarantee no pixels render, regardless of frame sprite state.
+
+2. **Debug instrumentation (gated on Debug Logging plugin param):** Added a one-shot debug dump on `Scene_MenuBase.start` that walks `this._windowLayer.children` and warns every child whose bottom edge sits within 100px of the hint top. For each suspect, logs: class name, x/y/w/h, visible state, and _backgroundType value. If the rectangle persists after the dimension-nuke, the user can flip Debug Logging on in Plugin Manager, open the menu, and check the console to identify the exact culprit by name.
+
+**Verification checklist**
+- [ ] Open menu on any map → centered hint band clean, no thin rectangle above it
+- [ ] Test across multiple scenes and maps as before
+- [ ] If rectangle still visible: enable `Debug Logging: true` in KB_MainMenuVisual params, open menu, check console for window names/dimensions to identify culprit
+
+---
+
+## v0.6.21 RESOLUTION: Ghost frame root cause identified and suppressed
+
+**Date:** 2026-05-26  
+**Status:** RESOLVED  
+**Journey summary:** 5 iterations spanning v0.6.17 → v0.6.21
+
+**The culprit:** v0.6.20's debug dump output revealed the actual ghost-frame source — a raw `Window_Base` instance (not a named subclass) positioned at (x=240, y=641, w=536, h=60), visible=true, with no backgroundType set. This is a leftover popup window — likely from CGMZ_MapNameWindow, IgnisItemGoldPopup, or a similar map-side plugin that doesn't tear down properly on scene transition.
+
+**Why previous fixes missed it:**
+- v0.6.17–v0.6.19 targeted the button-assist window and three MainMenuCore windows by name — but the real culprit was an *unnamed* bare `Window_Base` instance created somewhere else in the plugin stack.
+- The debug dump's class-name logging exposed the difference: the assist and Playtime/Var/Gold windows have distinct names (`Window_ButtonAssist`, `Window_Gold`, etc.), but this one was `Window_Base` directly.
+
+**Fix (v0.6.21):** After `_kbNukeAssist` runs (which suppresses the assist + trio), walk the remaining children in `this._windowLayer.children` and apply the same nuke (visible=false + setBackgroundType(2) + move(0,0,0,0)) to any child whose constructor.name equals exactly 'Window_Base' AND whose bottom edge sits within 200px above the hint top.
+
+**Why it's safe:** KB_MainMenuVisual never instantiates raw `Window_Base` directly — all our windows are named subclasses (`KB_ActorCardMenu`, `Window_KBJournalCommand`, etc.). The bare Window_Base can only come from a third-party plugin, so suppressing it won't break our own UI.
+
+**The v0.6.20 debug-dump code remains:** gated on Debug Logging param, useful for future diagnostic sessions if another third-party popup leaks a frame.
+
+**Test plan:**
+- [ ] Open menu on any map → centered `[Z] Chọn  [X] Hồi` hint band is clean, no thin rectangle above it
+- [ ] Test Scene_Status (Trạng Thái), Scene_Skill (Kỹ Năng), Scene_Item (Vật Phẩm), Scene_Quest, Scene_Journal (Nhật Ký) — no ghost frame on any subscene
+- [ ] Test on multiple maps with different plugins active (to verify the suppression doesn't break other popups)
+- [ ] Confirm no other map-side popups break or disappear (IgnisItemGoldPopup, CGMZ_MapNameWindow should continue working)
+
+---
+
 ## Changelog entries
 
 See `docs/changelog.md`:
+- **v0.6.20** — Iteration #4: apply `move(x,y,0,0)` to Playtime/Var/Gold trio; add debug-dump tool (gated on Debug Logging param)
+- **v0.6.19** — Ghost frame fix continued — nuke assist dimensions + hook start()
+- **v0.6.18** — Ghost frame fix continued — Playtime/Variable/Gold windows
+- **v0.6.17** — Button-assist ghost frame killed
 - **v0.6.15** — Runtime-patch ElementStatusCore General-tab DrawJS to fit DP gauge cleanly (5-iteration DP-clipping journey resolved)
 - **v0.6.14** — KB_Localization placeholder resolution in class subtitle bypass
 - **v0.6.13** — ElementStatusCore drawTextEx discovered; class hook corrected; DP suppression reverted; clipping caveat documented
