@@ -77,7 +77,7 @@ Prologue → Ch.1 (split path Tuấn/Hải) → Ch.2 (party of 2) → Ch.3 (part
 ### Layer 3 — UI / UX
 - `VisuMZ_1_MainMenuCore`, `MessageCore`, `SkillsStatesCore`, `ItemsEquipsCore`
 - `CGMZ_MapNameWindow`, `CGMZ_ToastManager`, `CGMZ_GameOver`, `CGMZ_FastTravel`
-- `KB_TitleCommands`, `MOG_TitleParticles`
+- `KB_TitleCommands`, `KB_MainMenuVisual`, `MOG_TitleParticles`
 
 ### Layer 4 — Game systems
 - `VisuMZ_2_QuestSystem` (active — pick one over CGMZ_QuestSystem)

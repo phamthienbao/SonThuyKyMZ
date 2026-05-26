@@ -90,15 +90,17 @@ All in-game UI text uses **Hán Việt** (Sino-Vietnamese) vocabulary for litera
 | Status | Trạng Thái | 狀態 | `menu_cmd_status` |
 | Formation | Đội Hình | 隊形 | `menu_cmd_formation` |
 | Journal (hub) | Nhật Ký | 日記 | `menu_cmd_journal` |
-| Story Log | Hồi Ký | 回記 | `journal_cmd_story` |
-| Monster Book | Yêu Phổ | 妖譜 | `journal_cmd_bestiary` |
-| Quest Log | Nhiệm Vụ | 任務 | `journal_cmd_quest` |
+| Journey | Hành Trình | 行程 — "journey / itinerary" (changed from "Hồi Ký" 回記 in v0.6.2) | `journal_cmd_story` |
+| Monster Book | Quái Phổ | 怪譜 (user change 2026-05-26 — preferred "demon/monsters" register over "yokai/spirits") | `journal_cmd_bestiary` |
+| Quest Logs | Nhiệm Vụ | 任務 | `journal_cmd_quest` |
+| Legends | Truyền Thuyết | 傳説 — "legend(s)" (changed from "Truyền Kỳ" 傳奇 in v0.6.2) | `journal_cmd_lore` |
 | Map | Bản Đồ | 版圖 | `menu_cmd_map` |
 | Options | Thiết Đặt | 設定 | `menu_cmd_options` |
 | Save | Save | (untranslated, user pref) | `menu_cmd_save` |
 | Quit | Rời Đi | plain Vietnamese; "Hồi Gia" 回家 alt pending pick | `menu_cmd_quit` |
 | Gold unit | Lượng | 兩 (taels) | `menu_unit_gold` |
 | Playtime | Thời Gian | 時間 | `menu_label_playtime` |
+| Journal (scene title) | Nhật Ký | 日記 (scene header text, Step 10) | `journal_scene_title` |
 | HP / MP / TP | (untranslated, user pref) | — | — |
 
 Reference: `docs/spec/main-menu.md` is the authoritative source for menu terminology decisions.

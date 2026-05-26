@@ -1,9 +1,9 @@
 //=============================================================================
-// KB_MainMenuVisual.js  v0.5.6
+// KB_MainMenuVisual.js  v0.6.7
 //=============================================================================
 /*:
  * @target MZ
- * @plugindesc [v0.5.6] Sumi-e ink-wash main menu — custom centered bottom hint.
+ * @plugindesc [v0.6.7] Sumi-e ink-wash main menu — centered hint on all menu scenes.
  * @author KB
  *
  * @help
@@ -77,19 +77,6 @@
  *
  * @param Enable Party Column
  * @desc Right-side vertical stack of actor cards. Steps 7-8.
- * @type boolean
- * @default false
- *
- * @param --- Handler Wiring ---
- * @default
- *
- * @param Wire Journal Handler
- * @desc Push Scene_KBJournal when "journal" command is selected. Step 10.
- * @type boolean
- * @default false
- *
- * @param Wire Map Handler
- * @desc Push Scene_FastTravel when "map" command is selected. Step 13.
  * @type boolean
  * @default false
  *
@@ -322,8 +309,6 @@ Imported.KB_MainMenuVisual = true;
     const ENABLE_HEADER     = bool('Enable Header');
     const ENABLE_ATMOSPHERE = bool('Enable Atmosphere Panel');
     const ENABLE_PARTY      = bool('Enable Party Column');
-    const WIRE_JOURNAL      = bool('Wire Journal Handler');
-    const WIRE_MAP          = bool('Wire Map Handler');
     const DEBUG             = bool('Debug Logging');
 
     const ENABLE_CMD_STYLE  = bool('Enable Command Style');
@@ -374,8 +359,6 @@ Imported.KB_MainMenuVisual = true;
         header: ENABLE_HEADER,
         atmosphere: ENABLE_ATMOSPHERE,
         party: ENABLE_PARTY,
-        journal: WIRE_JOURNAL,
-        map: WIRE_MAP,
         cmdStyle: ENABLE_CMD_STYLE,
     });
 
@@ -582,7 +565,14 @@ Imported.KB_MainMenuVisual = true;
             bmp.fontSize = HEADER_INFO_FONT;
             bmp.textColor = HEADER_INFO_COL;
             const gap = sx(20);
-            let cursor = w - padX;
+            // Reserve space for the top-right cancel button (touch UI / VisuMZ)
+            // so our right-aligned text doesn't slide under it.
+            const scene = SceneManager._scene;
+            const btn = scene && scene._cancelButton;
+            const padR = (btn && btn.visible)
+                ? Math.max(padX, w - btn.x + sx(12))
+                : padX;
+            let cursor = w - padR;
 
             const goldUnit = this._t('menu_unit_gold',
                 TextManager.currencyUnit || 'Gold');
@@ -975,24 +965,77 @@ Imported.KB_MainMenuVisual = true;
     class Window_KBJournalCommand extends Window_Command {
         constructor(rect) {
             super(rect);
+            this.setBackgroundType(2);
+            this._kbHomeY    = this.y;
+            this._kbSlideT   = 0;
+            this._kbSlideMax = SLIDE_FRAMES;
+            this.y           = this._kbHomeY + sy(SLIDE_DIST);
         }
         makeCommandList() {
-            const t = (k, fallback) => {
-                if (typeof KB_Localization !== 'undefined' && KB_Localization.getText) {
-                    return KB_Localization.getText(k) || fallback;
+            const questEnabled = typeof Scene_Quest !== 'undefined';
+            // story/bestiary/lore stay disabled until Step 12 wires them into
+            // CGMZ_Encyclopedia categories. Their handlers are stubs today, so
+            // showing them as clickable made the menu look frozen on click.
+            this.addCommand(tJournal('journal_cmd_story',    'Journey'),      'story',    false);
+            this.addCommand(tJournal('journal_cmd_bestiary', 'Monster Book'), 'bestiary', false);
+            this.addCommand(tJournal('journal_cmd_quest',    'Quest Logs'),   'quest',    questEnabled);
+            this.addCommand(tJournal('journal_cmd_lore',     'Legends'),      'lore',     false);
+        }
+        itemTextAlign() { return 'center'; }
+        // Brushstroke cinnabar underline selection — mirrors Window_MenuCommand
+        // styling so the journal hub feels like part of the main menu.
+        drawItemBackground(index) {
+            if (this.active && index === this._index && this.contentsBack) {
+                const rect = this.itemLineRect(index);
+                this.contentsBack.fillRect(
+                    rect.x + 4,
+                    rect.y + rect.height - 4,
+                    rect.width - 8,
+                    3,
+                    SEL_COLOR
+                );
+            }
+        }
+        select(index) {
+            const prev = this._index;
+            super.select(index);
+            if (this.contents && this.contentsBack) {
+                if (prev !== this._index && prev >= 0 && prev < this.maxItems()) {
+                    this.redrawItem(prev);
                 }
-                if (typeof KBLocalization !== 'undefined' && KBLocalization.getText) {
-                    return KBLocalization.getText(k) || fallback;
-                }
-                return fallback;
-            };
-            const questEnabled     = typeof Scene_Quest !== 'undefined';
-            const encyclopediaOK   = typeof CGMZ_Scene_Encyclopedia !== 'undefined';
-            this.addCommand(t('journal_cmd_story',     'Story Log'),    'story',    encyclopediaOK);
-            this.addCommand(t('journal_cmd_bestiary',  'Monster Book'), 'bestiary', encyclopediaOK);
-            this.addCommand(t('journal_cmd_quest',     'Quest Log'),    'quest',    questEnabled);
+                if (this._index >= 0) this.redrawItem(this._index);
+            }
+        }
+        activate() {
+            super.activate();
+            if (this.contents && this._index >= 0) this.redrawItem(this._index);
+        }
+        deactivate() {
+            super.deactivate();
+            if (this.contents && this._index >= 0) this.redrawItem(this._index);
+        }
+        refreshCursor()  { this.setCursorRect(0, 0, 0, 0); }
+        _refreshCursor() { this.setCursorRect(0, 0, 0, 0); }
+        update() {
+            super.update();
+            if (this._kbSlideT < this._kbSlideMax) {
+                this._kbSlideT++;
+                const t = this._kbSlideT / this._kbSlideMax;
+                const eased = 1 - Math.pow(1 - t, 3);
+                this.y = (this._kbHomeY + sy(SLIDE_DIST)) - sy(SLIDE_DIST) * eased;
+            }
         }
     }
+
+    const tJournal = (k, fallback) => {
+        if (typeof KB_Localization !== 'undefined' && KB_Localization.getText) {
+            return KB_Localization.getText(k) || fallback;
+        }
+        if (typeof KBLocalization !== 'undefined' && KBLocalization.getText) {
+            return KBLocalization.getText(k) || fallback;
+        }
+        return fallback;
+    };
 
     //==========================================================
     // Scene_KBJournal — journal hub scene (step 10)
@@ -1000,7 +1043,33 @@ Imported.KB_MainMenuVisual = true;
     class Scene_KBJournal extends Scene_MenuBase {
         create() {
             super.create();
+            // Window first so the title sprite can anchor off its resting Y.
             this.createJournalCommandWindow();
+            this.createJournalTitle();
+        }
+        createJournalTitle() {
+            const w = sx(640);
+            const h = sy(72);
+            const sprite = new Sprite(new Bitmap(w, h));
+            const b = sprite.bitmap;
+            b.fontFace      = $gameSystem.mainFontFace();
+            b.fontSize      = Math.round(sy(28));
+            b.textColor     = HEADER_TITLE_COL;
+            b.outlineColor  = 'rgba(0,0,0,0.85)';
+            b.outlineWidth  = 4;
+            const label = tJournal('journal_scene_title', 'Journal');
+            b.drawText(label, 0, 0, w, h - sy(8), 'center');
+            // Brushstroke hairline under the title.
+            const hairW = Math.round(sx(180));
+            const hairX = Math.floor((w - hairW) / 2);
+            b.fillRect(hairX, h - sy(6), hairW, 2, HEADER_SEP_COLOR);
+            sprite.x = Math.floor((Graphics.boxWidth - w) / 2);
+            // Anchor to the command window's resting position (not its live y,
+            // which sits below the rest position during the slide-in).
+            const restY = this._journalCommandWindow._kbHomeY ?? this._journalCommandWindow.y;
+            sprite.y = restY - h - sy(12);
+            this._journalTitleSprite = sprite;
+            this.addChild(sprite);
         }
         createJournalCommandWindow() {
             const rect = this.journalCommandRect();
@@ -1008,24 +1077,30 @@ Imported.KB_MainMenuVisual = true;
             this._journalCommandWindow.setHandler('story',    this.commandStory.bind(this));
             this._journalCommandWindow.setHandler('bestiary', this.commandBestiary.bind(this));
             this._journalCommandWindow.setHandler('quest',    this.commandQuest.bind(this));
+            this._journalCommandWindow.setHandler('lore',     this.commandLore.bind(this));
             this._journalCommandWindow.setHandler('cancel',   this.popScene.bind(this));
             this.addWindow(this._journalCommandWindow);
         }
         journalCommandRect() {
-            const w = sx(320);
-            const h = this.calcWindowHeight(3, true);
+            const w = sx(360);
+            const h = this.calcWindowHeight(4, true);
             const x = Math.floor((Graphics.boxWidth - w) / 2);
             const y = Math.floor((Graphics.boxHeight - h) / 2);
             return new Rectangle(x, y, w, h);
         }
         commandStory() {
-            // step 12: push CGMZ_Encyclopedia, jump to Lore category
+            // step 12: push CGMZ_Encyclopedia, jump to Story Summary category
             dlog('Scene_KBJournal.commandStory — stub (step 12)');
             this._journalCommandWindow.activate();
         }
         commandBestiary() {
-            // step 12: push CGMZ_Encyclopedia, jump to Bestiary category
+            // step 12: push CGMZ_Encyclopedia, jump to Monster Book category
             dlog('Scene_KBJournal.commandBestiary — stub (step 12)');
+            this._journalCommandWindow.activate();
+        }
+        commandLore() {
+            // step 12: push CGMZ_Encyclopedia, jump to Lore category
+            dlog('Scene_KBJournal.commandLore — stub (step 12)');
             this._journalCommandWindow.activate();
         }
         commandQuest() {
@@ -1039,6 +1114,31 @@ Imported.KB_MainMenuVisual = true;
         }
     }
     window.Scene_KBJournal = Scene_KBJournal;
+
+    //==========================================================
+    // Scene_MenuBase: centered bottom hint on ALL menu scenes
+    // (Item / Skill / Equip / Status / Options / Save / Quest /
+    // Journal / FastTravel / Encyclopedia / etc.) — replaces
+    // VisuMZ's right-aligned button assist for visual consistency.
+    //==========================================================
+    const _SceneMenuBase_create = Scene_MenuBase.prototype.create;
+    Scene_MenuBase.prototype.create = function() {
+        _SceneMenuBase_create.call(this);
+        if (!USE_CUSTOM_HINT) return;
+        try {
+            if (this._buttonAssistWindow) {
+                this._buttonAssistWindow.visible = false;
+                this._buttonAssistWindow.deactivate();
+            }
+            if (!this._kbHint) {
+                this._kbHint = new KB_MenuButtonHint();
+                this.addChild(this._kbHint);
+            }
+        } catch (error) {
+            console.error('[KB_MainMenuVisual] Scene_MenuBase hint init failed:',
+                error, error && error.stack);
+        }
+    };
 
     //==========================================================
     // Scene_Menu alias — instantiate enabled layers
@@ -1058,18 +1158,11 @@ Imported.KB_MainMenuVisual = true;
                         if (w) { w.hide(); w.deactivate(); }
                     }
                 }
-                if (USE_CUSTOM_HINT) {
-                    // Drop VisuMZ's button assist entirely; our hint replaces
-                    // it on this scene only (other scenes keep VisuMZ's bar).
-                    if (this._buttonAssistWindow) {
-                        this._buttonAssistWindow.visible = false;
-                        this._buttonAssistWindow.deactivate();
-                    }
-                    this._kbHint = new KB_MenuButtonHint();
-                    this.addChild(this._kbHint);
-                } else if (HEADER_MOVE_ASSIST && this._buttonAssistWindow) {
-                    // Fallback: keep VisuMZ's bar but drop it to the bottom
-                    // edge so it stops overlapping the header band.
+                // Custom hint is added by the Scene_MenuBase.create alias
+                // above (applies to all menu scenes). When the hint is off
+                // but the header is on, drop VisuMZ's assist to the bottom
+                // edge so it stops overlapping the header band.
+                if (!USE_CUSTOM_HINT && HEADER_MOVE_ASSIST && this._buttonAssistWindow) {
                     const baw = this._buttonAssistWindow;
                     baw.y = Graphics.boxHeight - baw.height;
                 }
@@ -1113,6 +1206,45 @@ Imported.KB_MainMenuVisual = true;
         }
     };
 
+    //==========================================================
+    // Actor-select visibility — show stock status window during
+    // commandPersonal (Skill/Equip/Status/Formation/ClassChange).
+    // Without this, the hidden status window still captures input
+    // but the player can't see the cursor, so the game looks frozen.
+    //==========================================================
+    const _SceneMenu_commandPersonal = Scene_Menu.prototype.commandPersonal;
+    Scene_Menu.prototype.commandPersonal = function() {
+        if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow) {
+            this._statusWindow.show();
+            // Hide our party column during actor selection so it doesn't
+            // double up with the stock status window (both show the same
+            // actor info — looks cluttered).
+            if (this._kbPartyColumn) this._kbPartyColumn.visible = false;
+        }
+        _SceneMenu_commandPersonal.call(this);
+    };
+
+    const _SceneMenu_onPersonalCancel = Scene_Menu.prototype.onPersonalCancel;
+    Scene_Menu.prototype.onPersonalCancel = function() {
+        _SceneMenu_onPersonalCancel.call(this);
+        if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow) {
+            this._statusWindow.hide();
+            this._statusWindow.deactivate();
+            if (this._kbPartyColumn) this._kbPartyColumn.visible = true;
+        }
+    };
+
+    const _SceneMenu_onPersonalOk = Scene_Menu.prototype.onPersonalOk;
+    Scene_Menu.prototype.onPersonalOk = function() {
+        if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow) {
+            this._statusWindow.hide();
+            // Restore visibility BEFORE the next scene pushes, so when we
+            // resume back to Scene_Menu the party column is already shown.
+            if (this._kbPartyColumn) this._kbPartyColumn.visible = true;
+        }
+        _SceneMenu_onPersonalOk.call(this);
+    };
+
     // Make the command column transparent when our ink-wash style is on, so
     // its windowskin frame doesn't compete with the atmosphere panel that
     // now spans full-width beneath it.
@@ -1127,16 +1259,18 @@ Imported.KB_MainMenuVisual = true;
     }
 
     //==========================================================
-    // Scene_Menu command handlers — journal + map symbol wiring
+    // Scene_Menu command handlers — journal + map symbol wiring.
+    // MainMenuCore registers a no-op CallHandlerJS for both symbols,
+    // and Window_Selectable.processOk deactivates the window after
+    // firing 'ok'. Without our overrides the window never reactivates
+    // → main menu hard-freezes. Always wire, no toggle.
     //==========================================================
     const _SceneMenu_createCommandWindow = Scene_Menu.prototype.createCommandWindow;
     Scene_Menu.prototype.createCommandWindow = function() {
         _SceneMenu_createCommandWindow.call(this);
-        if (WIRE_JOURNAL && this._commandWindow) {
+        if (this._commandWindow) {
             this._commandWindow.setHandler('journal', this.commandJournal.bind(this));
-        }
-        if (WIRE_MAP && this._commandWindow) {
-            this._commandWindow.setHandler('map', this.commandMap.bind(this));
+            this._commandWindow.setHandler('map',     this.commandMap.bind(this));
         }
     };
     Scene_Menu.prototype.commandJournal = function() {

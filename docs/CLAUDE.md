@@ -82,7 +82,7 @@ SonThuyKyMZ/                       ← single repo (game + docs)
 - **VisuMZ:** CoreEngine, BattleCore, BattleSystemSTB, ElementStatusCore, EventsMoveCore, ItemsEquipsCore, MainMenuCore, MessageCore, SkillsStatesCore, QuestSystem, VisualBattleEnv, WeaponAnimation, VictoryAftermath, VisualStateEffects, ActSeqCamera/Impact, BattleAI, WeaknessPopups, EncounterEffects, GabWindow, PictureCmnEvts
 - **CGMZ:** Core, Encyclopedia, GameOver, MapNameWindow, ToastManager, FastTravel
 - **GabeMZ:** FollowersControl, EventFloatingInfo
-- **KB (custom, ours):** KB_CoreEngine, KB_Optimized, KB_TitleCommands, KB_Localization, KB_Dev_Extractor, KB_SaveCore (save UI), KB_SideViewBattleUI (battle layout), KB_BongToiGauge, KB_NgocHonState
+- **KB (custom, ours):** KB_CoreEngine, KB_Optimized, KB_TitleCommands, KB_Localization, KB_Dev_Extractor, KB_SaveCore (save UI), KB_MainMenuVisual (menu UI), KB_SideViewBattleUI (battle layout), KB_BongToiGauge, KB_NgocHonState
 - **Misc:** DragonSmoothCamera, MOG_TitleParticles, IgnisItemGoldPopup, schach-parsing/pathfinding, Public_0_PixiJsFilters
 
 **Note:** 

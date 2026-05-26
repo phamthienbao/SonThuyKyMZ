@@ -1,4 +1,4 @@
-# Main Menu (KB_MainMenuVisual v0.5.0 shipped, v1.0 in progress)
+# Main Menu (KB_MainMenuVisual v0.6.7 shipped)
 
 ## Overview
 
@@ -7,7 +7,7 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
 - **File:** `js/plugins/KB_MainMenuVisual.js` (to be created)
 - **Dependencies:** KB_CoreEngine, KB_Localization, VisuMZ_0_CoreEngine, VisuMZ_1_MainMenuCore
 - **Optional integrations:** KB_BongToiGauge, KB_NgocHonState, VisuMZ_2_QuestSystem, CGMZ_FastTravel
-- **Status:** Spec, not yet implemented
+- **Status:** v0.6.7 shipped (custom centered button hint extended to all Scene_MenuBase subclasses; header right-cluster padding safeguard for cancel button; party column visibility toggled during actor selection)
 - **Design canvas:** 1280×720 (matches battle UI canvas; uses same `sx()` / `sy()` scaling helpers from KB_CoreEngine)
 
 ## Goals
@@ -46,7 +46,20 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
    (sx 0–280)       (sx 280–880)             (sx 880–1280)
 ```
 
-### Header band (Step 9 — shipped v0.5.0)
+### Header band and menu button hint (Step 9 — shipped v0.5.0–v0.6.7)
+
+**Status:** Fully implemented with Sprite-based rendering. Custom centered button hint extends to all Scene_MenuBase subclasses in v0.6.7.
+
+**Button hint (v0.5.6+, extended v0.6.7):**
+- Custom `KB_MenuButtonHint` sprite replaces VisuMZ's right-aligned button-assist bar
+- Displays `[Z] Chọn   [X] Hồi` centered at the bottom of the screen, 56px high
+- **v0.6.7 extension:** Previously only on `Scene_Menu`; now added via `Scene_MenuBase.create` alias so all menu subscenes (Skill / Equip / Status / Item / Options / Quest / Journal / FastTravel / Save) show the same clean centered hint
+- Per-scene rich hints (Page Up/Down, Switch Ally) dropped for visual consistency; if future scenes need extended hints, the `KB_MenuButtonHint` class can be extended to read per-scene context
+- Params: `Use Custom Bottom Hint` (true), `Hint Height` (56), `Hint OK Key` (Z), `Hint OK Label` (Chọn), `Hint Cancel Key` (X), `Hint Cancel Label` (Hồi)
+- Localization: hint labels route through `KBLocalization.process`, so they respect the active language setting
+- **v0.6.6 safeguard:** When `Use Custom Hint` is off but `Header Relocates Button Assist` is on, Scene_Menu still has a fallback path to relocate VisuMZ's default assist bar to the bottom edge (legacy behavior)
+
+### Header band details (Step 9 — v0.5.0+)
 
 **Status:** Fully implemented with Sprite-based rendering.
 
@@ -55,6 +68,7 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
 - Right: right-aligned cluster: gold amount + "Lượng" unit label, playtime (hh:mm:ss format), map location
 - Rendering: Full-width Sprite (KB_MenuHeader) paints dynamically each frame with playtime delta check to minimize redraws
 - Style: ink-wash parchment background (alpha 0.45), cinnabar/taupe ink separator divider below, no solid box — paper texture shows through
+- **v0.6.6 fix:** Right cluster padding now derives dynamically from `SceneManager._scene._cancelButton.x` when touch UI is enabled. Falls back to fixed `padX` when cancel button is absent. Prevents overlap of gold/playtime/location text underneath the top-right back button.
 - Params (8 total):
   - Header Height: 64
   - Header Title Font Size: 26
@@ -138,7 +152,7 @@ Authoritative source: `docs/glossary.md`. The menu adds these entries:
 
 ## Journal hub (Nhật Ký)
 
-The Nhật Ký command opens a **hub scene**, not a single sub-screen. The hub shows three options that route to existing plugin scenes. This keeps narrative content (Story Log), bestiary (Monster Book), and active goals (Quest Log) under one mental category for the player while letting each subsystem stay on its specialist plugin.
+The Nhật Ký command opens a **hub scene**, not a single sub-screen. The hub shows four options that route to existing plugin scenes. This keeps narrative content (Journey), bestiary (Monster Book), legendary lore (Legends), and active goals (Quest Logs) under one mental category for the player while letting each subsystem stay on its specialist plugin.
 
 ```
         Main Menu
@@ -148,9 +162,10 @@ The Nhật Ký command opens a **hub scene**, not a single sub-screen. The hub s
    ┌────────────────────────────────────┐
    │   Nhật Ký                          │
    ├────────────────────────────────────┤
-   │  ⬢ Hồi Ký        (Story Log)       │ ──► CGMZ_Encyclopedia (Lore category)
-   │  ⬢ Yêu Phổ       (Monster Book)    │ ──► CGMZ_Encyclopedia (Bestiary category)
-   │  ⬢ Nhiệm Vụ      (Quest Log)       │ ──► VisuMZ_2_QuestSystem (Scene_Quest)
+   │  ⬢ Hành Trình      (Journey)       │ ──► CGMZ_Encyclopedia (Story category) [Step 12]
+   │  ⬢ Quái Phổ      (Monster Book)    │ ──► CGMZ_Encyclopedia (Bestiary category) [Step 12]
+   │  ⬢ Nhiệm Vụ      (Quest Logs)      │ ──► VisuMZ_2_QuestSystem (Scene_Quest) [Step 11]
+   │  ⬢ Truyền Thuyết     (Legends)     │ ──► CGMZ_Encyclopedia (Lore category) [Step 12]
    └────────────────────────────────────┘
 ```
 
@@ -158,51 +173,38 @@ The Nhật Ký command opens a **hub scene**, not a single sub-screen. The hub s
 
 | Order | Localization key | Vietnamese (Hán Việt) | Etymology | Action |
 |-------|------------------|------------------------|-----------|--------|
-| 1 | `journal_cmd_story` | Hồi Ký | 回記 — "memoir / recollection" | Open CGMZ_Encyclopedia, jump to Lore/Story category |
-| 2 | `journal_cmd_bestiary` | Yêu Phổ | 妖譜 — "register of monsters / yokai" | Open CGMZ_Encyclopedia, jump to Bestiary category |
-| 3 | `journal_cmd_quest` | Nhiệm Vụ | 任務 | Open VisuMZ_2_QuestSystem Scene_Quest |
+| 1 | `journal_cmd_story` | Hành Trình | 行程 — "journey / itinerary" | Open CGMZ_Encyclopedia, jump to Story category (Step 12) |
+| 2 | `journal_cmd_bestiary` | Quái Phổ | 怪譜 — "register of demons / monsters" | Open CGMZ_Encyclopedia, jump to Bestiary category (Step 12) |
+| 3 | `journal_cmd_quest` | Nhiệm Vụ | 任務 | Open VisuMZ_2_QuestSystem Scene_Quest (Step 11) |
+| 4 | `journal_cmd_lore` | Truyền Thuyết | 傳説 — "legend(s)" | Open CGMZ_Encyclopedia, jump to Lore category (Step 12) |
 
 ### Hub scene architecture
 
 - New class: **`Scene_KBJournal`** (subclass of `Scene_MenuBase`)
-- Window: **`Window_KBJournalCommand`** — 3 vertical commands, parchment background, brushstroke selection underline (same visual language as main menu command column)
+- Window: **`Window_KBJournalCommand`** — 4 vertical commands, parchment background, brushstroke selection underline (same visual language as main menu command column). Window resized via `calcWindowHeight(4, true)`.
 - Handlers push to the respective specialist scene via `SceneManager.push(...)`; on return, pop back to `Scene_KBJournal` (so the player can switch between sub-views without going through the main menu)
 - Cancel returns to `Scene_Menu`
+- Scene title sprite ("Nhật Ký") anchors off the command window's resting Y position (`_journalCommandWindow._kbHomeY`) with a 12px gap, ensuring correct centering regardless of row count
+- **Command enable/disable state (v0.6.2–v0.6.4):** Hành Trình (story), Quái Phổ (bestiary), and Truyền Thuyết (lore) are disabled (grayed out) until Step 12 wires them to CGMZ_Encyclopedia. Quest (Nhiệm Vụ) stays enabled in Step 11 onward, allowing immediate testing. The disable flag is controlled by the `makeCommandList` condition check (passes `false` for the three stub commands).
 
 ### CGMZ_Encyclopedia integration
 
-CGMZ_Encyclopedia supports multiple categories (Bestiary, Items, Lore, etc.). For the journal hub:
+CGMZ_Encyclopedia supports multiple categories (Bestiary, Items, Lore, Story, etc.). For the journal hub, three categories are used:
 
 - Use the plugin's existing `SceneManager.push(CGMZ_Scene_Encyclopedia)` with a pre-selected category. If direct category-jump isn't supported, wrap with a small alias that sets the initial category index before the scene paints.
-- Configure two categories in CGMZ_Encyclopedia plugin params: `Bestiary` (for Yêu Phổ) and `Lore` (for Hồi Ký).
-- Lore category data: written-up story beats unlocked by switch flips on chapter completion (`chapter_p_clear`, `chapter_1_clear`, etc.). Each lore entry has a localization key for title + body.
-- Bestiary category data: monsters auto-register on first kill (CGMZ default behavior).
+- Configure three categories in CGMZ_Encyclopedia plugin params:
+  - **Story Summary** (for Hồi Ký) — written-up story beats unlocked by switch flips on chapter completion (`chapter_p_clear`, `chapter_1_clear`, etc.). Each entry has a localization key for title + body.
+  - **Bestiary** (for Yêu Phổ) — monsters auto-register on first kill (CGMZ default behavior).
+  - **Lore** (for Truyền Kỳ) — legendary chronicles, NPC bios, item histories, world-building content. Unlocked via story gates or discovered through exploration.
+- All three categories use CGMZ_Encyclopedia as the backend; only Quest Logs use VisuMZ_2_QuestSystem.
 
-**This is a follow-up build** — KB_Journal scene is part of the main menu build, but Lore data authoring + Bestiary configuration are tracked separately.
+**This is a follow-up build** — KB_Journal scene is part of the main menu build, but category data authoring + Bestiary configuration are tracked separately.
 
 ## Localization integration
 
-Create `locales/vi/Menu.csv` (and `locales/en/Menu.csv`) with:
+The `locales/vi/Menu.csv` (and `locales/en/Menu.csv`) contain the 14 main-menu keys. **Registered in KB_Localization plugin params** (v0.6.0 onward).
 
-```csv
-Key;vi
-menu_cmd_item;Vật Phẩm
-menu_cmd_skill;Kỹ Năng
-menu_cmd_equip;Trang Bị
-menu_cmd_status;Trạng Thái
-menu_cmd_formation;Đội Hình
-menu_cmd_journal;Nhật Ký
-menu_cmd_map;Bản Đồ
-menu_cmd_options;Thiết Đặt
-menu_cmd_save;Save
-menu_cmd_quit;Rời Đi
-menu_unit_gold;Lượng
-journal_cmd_story;Hồi Ký
-journal_cmd_bestiary;Yêu Phổ
-journal_cmd_quest;Nhiệm Vụ
-```
-
-Register `Menu` in KB_Localization plugin params (`Data Files`).
+**User note (2026-05-26):** Line 15 in `locales/vi/Menu.csv` was manually changed from `Yêu Phổ` to **`Quái Phổ`** (user preferred the demonic term). English label `Monster Book` unchanged in `locales/en/Menu.csv`.
 
 In `KB_MainMenuVisual.js`, fetch labels via `KB_Localization.getText('menu_cmd_item')` etc. when building Window_MenuCommand.
 
@@ -224,11 +226,18 @@ In `KB_MainMenuVisual.js`, fetch labels via `KB_Localization.getText('menu_cmd_i
 
 Use these MainMenuCore hooks (no core overrides):
 
-- **Command order / list:** plugin param `Main Menu Categories` → set to the 9 commands above with their localization-keyed labels.
-- **Custom command handlers:** plugin params `Custom Cmd 1..N` → wire entries 5 (Journal), 6 (Map), 8 (Save) to their respective scenes via JS code blocks calling `SceneManager.push(...)`.
+- **Command order / list:** plugin param `Main Menu Categories` → set to the 10 commands above with their localization-keyed labels.
+- **Custom command handlers:** Journal and Map handlers are **unconditionally wired** in `createCommandWindow` — no gate param needed. `commandJournal` always pushes `Scene_KBJournal`; `commandMap` checks for `Scene_FastTravel` and falls back to `activate()` if unavailable (graceful degrade).
 - **Layout override:** plugin param `Status Graphic` → `none` (we draw our own); plugin param `Status Window JS > Window Width/Height` → 0 (hide stock status window).
 - **Background:** plugin param `Background Settings > Snapshot` → false; we render our own background via `Scene_Menu.prototype.createBackground` extended in our plugin.
-- **Inject custom layers:** Currently aliasing `Scene_Menu.prototype.create` to add `KB_MenuHeader` (v0.5.0 shipped). Future steps will add `KB_MenuAtmosphereLayer` and `KB_MenuPartyColumn`. All additions are children of `this._windowLayer`'s parent so they layer correctly.
+- **Inject custom layers:** Currently aliasing `Scene_Menu.prototype.create` to add `KB_MenuHeader` (v0.5.0–v0.5.6 shipped). Custom layers (`KB_MenuAtmosphereLayer`, `KB_MenuPartyColumn`) are children of `this._windowLayer`'s parent so they layer correctly (behind command/status windows).
+- **Actor selection flow:** Commands Skill / Equip / Status / Formation / ClassChange all route through `Scene_Menu.commandPersonal()`, which activates the stock status window (`this._statusWindow`) for actor selection. Three aliases manage visibility:
+  - `commandPersonal`: shows the stock status window **and hides the party column** (`this._kbPartyColumn.visible = false`) to prevent double-render of actor info.
+  - `onPersonalCancel`: re-hides the status window and restores party column visibility (`visible = true`).
+  - `onPersonalOk`: re-hides the status window and restores party column visibility **before** delegating to the original (so when the pushed scene pops back to the menu, the column is already visible).
+  - All guarded by `if (this._kbPartyColumn)` — no-op when `Enable Party Column` is off.
+  - Window stays at `backgroundType=2` (frames only, content visible) to avoid jarring pop-in. 
+  - Fix applied in v0.6.3 (initial actor-selection visibility); v0.6.5 (double-render dedup via party column toggle).
 
 ### Plugin load order
 
@@ -281,30 +290,31 @@ The atmospheric panel uses no asset — generated at runtime from the current ma
 
 ## Risk register
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| VisuMZ MainMenuCore param schema changes between versions | Low | Pin to current VisuMZ version in `docs/spec/main-menu.md`; track in changelog |
-| Ink filter on the atmospheric panel costs frame budget | Medium | Render once on menu open, cache to Bitmap, dispose on close — never re-filter per frame |
-| KB_BongToiGauge / KB_NgocHonState API not stable | Low | Lift gauge draw into KB_MainMenuVisual via the same helpers used in battle UI; if helpers absent, gauges degrade gracefully (omit, don't crash) |
-| `{key}` localization codes not parsed inside VisuMZ plugin params | Medium | Verify with one test quest before wiring all quests; fallback: pre-resolve in JS code block on plugin init |
-| Three quest plugins active simultaneously cause unhandled scene push | High if not addressed | First implementation step: disable CGMZ_QuestSystem + Galv_QuestLog in Plugin Manager and verify boot |
+| Risk | Likelihood | Status |
+|------|------------|--------|
+| VisuMZ MainMenuCore param schema changes between versions | Low | ✓ Mitigated (v0.6.0+) |
+| Ink filter on the atmospheric panel costs frame budget | Medium | ✓ Mitigated (cached, rendered once on open) |
+| KB_BongToiGauge / KB_NgocHonState API not stable | Low | ✓ Mitigated (v0.4.1+ uses placeGauge chain hook) |
+| `{key}` localization codes not parsed inside VisuMZ plugin params | Medium | ✓ Confirmed working (v0.6.2+) |
+| Three quest plugins active simultaneously cause unhandled scene push | Low | ✓ Resolved (CGMZ_QuestSystem + Galv_QuestLog disabled) |
+| MainMenuCore no-op handler gate causes Journal freeze | Resolved | ✓ Fixed in v0.6.4 (handlers now unconditional) |
 
 ## Implementation plan
 
 Sequenced for safe rollout. Each step ends in a runnable state.
 
-1. **Plugin cleanup** — Disable `CGMZ_QuestSystem`, `Galv_QuestLog`, `DKTools`, `DKTools_Localization` in Plugin Manager. Boot game, verify title screen still works.
-2. **Localization CSV** — Create `locales/vi/Menu.csv` and `locales/en/Menu.csv` with the 9 menu keys. Register `Menu` in KB_Localization params.
-3. **VisuMZ MainMenuCore config** — Set command list, hide stock status window, disable snapshot background. Boot menu, verify command labels render from CSV.
-4. **KB_MainMenuVisual skeleton** — Create the plugin file with empty `KB_MenuHeader`, `KB_MenuAtmosphereLayer`, `KB_MenuCommandWindow`, `KB_MenuPartyColumn`. Wire `Scene_Menu.create` alias. Boot, verify no crashes.
-5. **Command column polish** — Ink-blot icons, brushstroke selection, slide-in animation.
-6. **Atmospheric panel** — Map tilemap snapshot + PIXI filter chain + caching. Verify on 3 different maps.
-7. **Party column** — Actor cards with HP/MP. Verify with single-actor party and full 3-actor party.
-8. **Gauge integration** — Hook KB_BongToiGauge + KB_NgocHonState into actor cards. Verify gauges update when values change.
-9. **Header band** — Location name, playtime, gold + Lượng unit.
-10. **Journal hub scene** — Create `Scene_KBJournal` + `Window_KBJournalCommand` (3 commands: Hồi Ký / Yêu Phổ / Nhiệm Vụ). Wire `menu_cmd_journal` to push this scene.
+1. **Plugin cleanup** — Disable `CGMZ_QuestSystem`, `Galv_QuestLog`, `DKTools`, `DKTools_Localization` in Plugin Manager. Boot game, verify title screen still works. ✅ Done 2026-05-26
+2. **Localization CSV** — Create `locales/vi/Menu.csv` and `locales/en/Menu.csv` with the 9 menu keys. Register `Menu` in KB_Localization params. ✅ Done 2026-05-26
+3. **VisuMZ MainMenuCore config** — Set command list, hide stock status window, disable snapshot background. Boot menu, verify command labels render from CSV. ✅ Done 2026-05-26
+4. **KB_MainMenuVisual skeleton** — Create the plugin file with empty `KB_MenuHeader`, `KB_MenuAtmosphereLayer`, `KB_MenuCommandWindow`, `KB_MenuPartyColumn`. Wire `Scene_Menu.create` alias. Boot, verify no crashes. ✅ Done 2026-05-26 (v0.1)
+5. **Command column polish** — Ink-blot icons, brushstroke selection, slide-in animation. ✅ Done 2026-05-26 (v0.2)
+6. **Atmospheric panel** — Map tilemap snapshot + PIXI filter chain + caching. Verify on 3 different maps. ✅ Done 2026-05-26 (v0.3)
+7. **Party column** — Actor cards with HP/MP. Verify with single-actor party and full 3-actor party. ✅ Done 2026-05-26 (v0.4)
+8. **Gauge integration** — Hook KB_BongToiGauge + KB_NgocHonState into actor cards. Verify gauges update when values change. ✅ Done 2026-05-26 (v0.4.1–v0.4.4)
+9. **Header band** — Location name, playtime, gold + Lượng unit. ✅ Done 2026-05-26 (v0.5.0)
+10. **Journal hub scene** — Create `Scene_KBJournal` + `Window_KBJournalCommand` (4 commands: Hồi Ký / Yêu Phổ / Nhiệm Vụ / Truyền Kỳ). Wire `menu_cmd_journal` to push this scene. New locale keys `journal_scene_title` and `journal_cmd_lore` added. Window resized to `calcWindowHeight(4)`. Title sprite repositioned to anchor off command window resting Y. ✅ Done 2026-05-26 (v0.6.0 → v0.6.1)
 11. **Quest authoring** — Wire `journal_cmd_quest` → VisuMZ_2_QuestSystem. Author one sample quest using `{quest_*}` keys to validate the translation flow end-to-end.
-12. **Encyclopedia wiring** — Wire `journal_cmd_story` and `journal_cmd_bestiary` → CGMZ_Encyclopedia (category pre-select). Add Lore and Bestiary category configs in CGMZ_Encyclopedia plugin params. Author one sample Lore entry and confirm one auto-registered bestiary kill.
+12. **Encyclopedia wiring** — Wire `journal_cmd_story`, `journal_cmd_bestiary`, and `journal_cmd_lore` → CGMZ_Encyclopedia (category pre-select). Add Story Summary, Bestiary, and Lore category configs in CGMZ_Encyclopedia plugin params (3 categories total). Author one sample entry in each category and confirm auto-registered bestiary kill.
 13. **Fast travel wiring** — Wire `menu_cmd_map` to CGMZ_FastTravel scene.
 14. **QA pass** — Test menu open/close across maps, in/out of battle preludes, with party size 1/2/3. Log any regressions to `docs/qc/`.
 

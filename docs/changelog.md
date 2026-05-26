@@ -2,6 +2,103 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-26 — KB_MainMenuVisual v0.6.7: centered `[Z] Chọn  [X] Hồi` hint on all menu scenes
+
+Previously the custom centered hint only showed on Scene_Menu — Skill / Equip / Status / Quest / Journal / etc. all still rendered VisuMZ's right-aligned button-assist bar (with `< >`:Switch Ally, bottle:Select, bottle:Back). User asked to use the clean centered hint everywhere for consistency.
+
+- **New `Scene_MenuBase.create` alias** — gated on `USE_CUSTOM_HINT`. After the parent create finishes: hide `_buttonAssistWindow` if present, then add a `KB_MenuButtonHint` sprite (guarded by `!this._kbHint` so we don't double-add). Wrapped in try/catch with debug-safe `console.error`.
+- **Scene_Menu.create alias trimmed** — the hint-creation + assist-hide block moved up to Scene_MenuBase (which Scene_Menu inherits via `super.create()`). The `HEADER_MOVE_ASSIST` fallback (relocate VisuMZ's bar when our hint is off but the header is on) stays in Scene_Menu since it's header-specific.
+- Sprite Z-order unchanged — hint still renders above the window layer on every scene.
+- Hint shows `[Z] Chọn   [X] Hồi` everywhere. Scene-specific hints (Page Up/Down, Switch Ally) are dropped for visual cleanliness; if any scene grows to need a richer hint, we can extend `KB_MenuButtonHint` to read per-scene context.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.6: header right padding clears the cancel button
+
+User-reported screenshot: in the header band, `0 Lượng` (gold display) was rendering underneath the top-right cancel/back button. The right cluster used a fixed `padX = sx(24)` from the right edge, but Scene_MenuBase's `_cancelButton` (created when touch UI is on) takes up ~48-60px of the corner — well inside that padding.
+
+- **`KB_MenuHeader._paint`** now derives the right padding dynamically from `SceneManager._scene._cancelButton.x`. If the button exists and is visible, `padR = max(padX, w - btn.x + sx(12))` — i.e., push the right edge of our text past the button's left edge with a 12-px gap. Falls back to the existing `padX` when there's no cancel button (touch UI off, non-menu scenes, etc.).
+- Same fix protects gold, playtime, and location strings (they all align to the same `cursor` start position).
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.5: dedupe party display during actor selection
+
+v0.6.3 unhid the stock status window during `commandPersonal` to make actor selection visible — but the party column stayed visible too, so both rendered the same info simultaneously (full-width horizontal grid on the bottom + vertical card stack on the right). Cluttered and confusing — visible in user-reported screenshot.
+
+- **`commandPersonal` alias** now also hides `this._kbPartyColumn` (sets `visible = false`).
+- **`onPersonalCancel` alias** restores `_kbPartyColumn.visible = true` alongside hiding the status window.
+- **`onPersonalOk` alias** restores `_kbPartyColumn.visible = true` *before* delegating to the original (which calls `SceneManager.push(Scene_Skill / Equip / ...)`). When we resume back to Scene_Menu after the player exits the pushed scene, the party column is already visible.
+- Each alias guards with `if (this._kbPartyColumn)` so this is a no-op when `Enable Party Column` is off.
+
+Result: during actor selection, the stock status window is the sole actor-display. After cancel or after returning from the pushed scene, the party column comes back. No more double-render.
+
+Longer-term polish (deferred — file under Step 14): replace this "swap the visible widget" approach with one where the party column itself is the input-driven selector — sync its highlight to the hidden status window's `_index`. That eliminates the stock status grid from the user's eye entirely. Not worth the carry now.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.4: always-wire Journal/Map handlers (real Journal freeze fix)
+
+v0.6.3 disabled the journal *sub-commands* but didn't address the actual freeze: clicking **Journal in the main menu** still locked up the UI because `Wire Journal Handler` defaulted to false. Root cause:
+
+1. MainMenuCore registers a no-op CallHandlerJS for the `journal` symbol: `() => { const ext = arguments[0]; }`.
+2. `Window_Selectable.processOk()` calls `deactivate()` *before* invoking the OK handler.
+3. The no-op handler doesn't push a scene and doesn't reactivate the window.
+4. → command window stays deactivated forever → main menu hard-freezes.
+
+Our `setHandler('journal', commandJournal)` override would have fixed this, but it was gated on `WIRE_JOURNAL`, defaulting to false. Most setups never flipped the param.
+
+- **Removed `WIRE_JOURNAL` and `WIRE_MAP` const + @param blocks entirely.** Both handlers now wire unconditionally in the `createCommandWindow` alias. `commandJournal` always pushes `Scene_KBJournal`; `commandMap` still has its `typeof Scene_FastTravel !== 'undefined'` guard with a `_commandWindow.activate()` graceful-degrade fallback.
+- **Added comment block** explaining the MainMenuCore + processOk interaction so the next person doesn't reintroduce the gate.
+- Same root cause would have hit the Map command identically; preemptively fixed both.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.3: fix Skill / Journal freeze regressions
+
+Two "freeze" bugs reported after v0.6.2 — neither is actually a freeze (the engine kept running), but the player couldn't see anything happen.
+
+**Skill / Equip / Status / Formation / ClassChange freeze.** All five commands route through `Scene_Menu.commandPersonal()`, which activates `this._statusWindow` so the player can pick an actor. Since v0.4 we hide that window (`visible=false`, `setBackgroundType(2)`) because the party column visually replaces it. The window still captured input, so pressing arrows / Z worked — but with no visible cursor, the player saw nothing change.
+
+- **Three new aliases** on `Scene_Menu`: `commandPersonal` shows the stock status window before delegating; `onPersonalCancel` re-hides it; `onPersonalOk` re-hides before the next scene pushes (so when that scene pops back to the menu, the status window is hidden again). All three gated on `ENABLE_PARTY && HIDE_STOCK_STATUS`.
+- The status window keeps `backgroundType=2`, so during actor selection only its content (faces + stats) draws — no jarring windowskin frame pop-in.
+
+**Journal "freeze" on Hành Trình / Yêu Phổ / Truyền Thuyết clicks.** These three sub-commands are stubs until Step 12 wires them to CGMZ_Encyclopedia. The stubs called `dlog()` + `activate()` — visually identical to a freeze when the player clicked them.
+
+- **Disabled the 3 stub commands** in `Window_KBJournalCommand.makeCommandList` by passing `false` instead of `encyclopediaOK`. They render grayed out — clear "not yet available" signal. Quest stays enabled (works today). Step 12 will flip the flags back.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.2: final journal labels — Hành Trình / Truyền Thuyết
+
+User-driven label refinement on the 4-command journal hub:
+
+| Symbol     | Was (v0.6.1)         | Now (v0.6.2)                |
+|------------|----------------------|-----------------------------|
+| `story`    | Hồi Ký / Story Summary | **Hành Trình** / **Journey**    |
+| `bestiary` | Yêu Phổ / Monster Book | (unchanged)                 |
+| `quest`    | Nhiệm Vụ / Quest Logs  | (unchanged)                 |
+| `lore`     | Truyền Kỳ / Lore       | **Truyền Thuyết** / **Legends** |
+
+- **`journal_cmd_story`**: vi `Hồi Ký` → `Hành Trình` (行程 — "journey / itinerary"), en `Story Summary` → `Journey`. Reframes the first tab as a player's *path through the world* rather than a recap of plot beats — fits a wuxia/xianxia tone better.
+- **`journal_cmd_lore`**: vi `Truyền Kỳ` → `Truyền Thuyết` (傳説 — "legend(s)"), en `Lore` → `Legends`. `Truyền Thuyết` is the more common Vietnamese term for the legendary-tales register (vs. `Truyền Kỳ` which leans toward the Tang-dynasty short-fiction genre).
+- Plugin JS fallback strings updated to match (only ever fires if the CSV is missing). No code-symbol or key-string renames — `story`/`lore` symbols and `journal_cmd_*` keys preserved.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.1: 4-command journal hub (+ Lore / Truyền Kỳ)
+
+Refinement of Step 10. User asked for a 4-tab journal: **Story Summary / Monster Book / Quest Logs / Lore**. Going with 4-button hub (each pushes a dedicated sub-scene) instead of a true tab bar — three of the four sub-scenes can share CGMZ_Encyclopedia as the backend (Story Summary + Monster Book + Lore as three categories), only Quest Logs uses VisuMZ_2_QuestSystem. Tab bar deferred until playtest shows it's needed.
+
+- **New 4th command `lore`** in `Window_KBJournalCommand.makeCommandList`. Gated on `typeof CGMZ_Scene_Encyclopedia !== 'undefined'` like the other Encyclopedia categories.
+- **Locale: `journal_cmd_lore`** added — vi `Truyền Kỳ` (傳奇, the wuxia term for tales-of-the-strange / legends), en `Lore`. English labels for the existing 3 keys also touched up for the v1 tab semantics: `Story Log` → `Story Summary`, `Bestiary` → `Monster Book`, `Quest Log` → `Quest Logs`. Vietnamese labels unchanged (already correct).
+- **Command window resized** to `calcWindowHeight(4, true)` to fit the new row.
+- **Title sprite repositioned** — was hardcoded at `boxHeight/2 - sy(120)` which caused a 14-px overlap between the brushstroke hairline and the command window's top edge (latent v0.6.0 bug, hidden because the text itself didn't reach that low). Now anchors off `_journalCommandWindow._kbHomeY` (the resting Y, not the slide-start Y) with a 12-px gap, so it scales correctly with any future row-count change.
+- **`commandLore` stub handler** added; routes to CGMZ_Encyclopedia in Step 12 like Story Summary + Monster Book.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.0: journal hub wiring + sumi-e polish (Step 10)
+
+Step 10 of the main-menu plan: make selecting `Nhật Ký` push `Scene_KBJournal` and have the hub look like it belongs to the rest of the menu, not a stock command window.
+
+- **Journal hub wiring is in place** (was already coded, gated by `Wire Journal Handler`). `Scene_Menu.commandJournal` aliased onto the menu's command window via `setHandler('journal', ...)` so it overrides MainMenuCore's no-op CallHandlerJS stub.
+- **`Scene_KBJournal` polished to sumi-e**:
+  - Centered scene title "Nhật Ký" (28-px parchment-cream text, ink-outline, brushstroke hairline underneath). Title sprite added directly to the scene so it sits above the window layer.
+  - Command window goes transparent (`setBackgroundType(2)`) — no competing windowskin frame.
+  - Cinnabar brushstroke underline selection + hidden default cursor (mirrors `Window_MenuCommand` styling from Step 5).
+  - Cubic-out slide-in from below on scene open (60-px slide over 20 frames) so the hub doesn't pop in cold.
+  - Command window widened to 360 design-px and centered.
+- **New locale key `journal_scene_title`** added to `locales/vi/Menu.csv` ("Nhật Ký") and `locales/en/Menu.csv` ("Journal"). 14 total Menu keys now.
+- **Sub-handler stubs preserved.** `commandStory` / `commandBestiary` still log-only (CGMZ_Encyclopedia wiring is Step 12). `commandQuest` already pushes `Scene_Quest` when VisuMZ_2_QuestSystem is loaded (Step 11 will author a sample quest). All three sub-commands auto-disable if their target plugin isn't loaded — graceful degrade.
+- **User action**: flip `Wire Journal Handler` to true in Plugin Manager and select "Nhật Ký" in the main menu.
+
 ## 2026-05-26 — KB_MainMenuVisual v0.5.6: custom centered bottom hint replaces VisuMZ button assist
 
 User asked for `:Select :Back` to be centered at the bottom. VisuMZ's `Window_ButtonAssist` lays out its segments at fixed pixel offsets calculated from full screen width, so any resize/shift hack either crops or stays right-anchored. Cleaner to drop a custom hint sprite on Scene_Menu only.
