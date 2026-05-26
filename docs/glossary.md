@@ -90,10 +90,10 @@ All in-game UI text uses **Hán Việt** (Sino-Vietnamese) vocabulary for litera
 | Status | Trạng Thái | 狀態 | `menu_cmd_status` |
 | Formation | Đội Hình | 隊形 | `menu_cmd_formation` |
 | Journal (hub) | Nhật Ký | 日記 | `menu_cmd_journal` |
-| Journey | Hành Trình | 行程 — "journey / itinerary" (changed from "Hồi Ký" 回記 in v0.6.2) | `journal_cmd_story` |
-| Monster Book | Quái Phổ | 怪譜 (user change 2026-05-26 — preferred "demon/monsters" register over "yokai/spirits") | `journal_cmd_bestiary` |
-| Quest Logs | Nhiệm Vụ | 任務 | `journal_cmd_quest` |
-| Legends | Truyền Thuyết | 傳説 — "legend(s)" (changed from "Truyền Kỳ" 傳奇 in v0.6.2) | `journal_cmd_lore` |
+| Journey (Hành Trình) | Hành Trình | 行程 — "journey / itinerary" (changed from "Hồi Ký" 回記 in v0.6.2) | `journal_cmd_story` |
+| Monster Book (Quái Phổ) | Quái Phổ | 怪譜 (user changed 2026-05-26 — preferred "demon/monsters" register over "yokai/spirits") | `journal_cmd_bestiary` |
+| Quest Logs (Nhiệm Vụ) | Nhiệm Vụ | 任務 | `journal_cmd_quest` |
+| Legends (Truyền Thuyết) | Truyền Thuyết | 傳説 — "legend(s)" (changed from "Truyền Kỳ" 傳奇 in v0.6.2) | `journal_cmd_lore` |
 | Map | Bản Đồ | 版圖 | `menu_cmd_map` |
 | Options | Thiết Đặt | 設定 | `menu_cmd_options` |
 | Save | Save | (untranslated, user pref) | `menu_cmd_save` |
