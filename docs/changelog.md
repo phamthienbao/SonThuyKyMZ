@@ -2,6 +2,122 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-26 — KB_MainMenuVisual v0.4.4: class name as visual subtitle, not 2nd name
+
+- **UX feedback:** Class name was rendering at the same size/weight as character name, reading like a two-line name field.
+- **Change:** Class name + level now share one **subtitle row** beneath the character name. Subtitle uses smaller font (18 px default, plugin param) and dim warm-gray ink color (`#b8a888` default, plugin param). Class on left, "Lv N" packed compact on right.
+- **New plugin params:** `Class Subtitle Font Size` (18), `Class Subtitle Color` (#b8a888)
+- Result: card reads as **Name** (prominent) → *class · Lv N* (subtitle) → gauges, instead of two equally-weighted name lines.
+
+## 2026-05-26 — KB_MainMenuVisual v0.4.3: Lv number now visible on cards
+
+- **Bug:** "Lv" label rendered but level number was missing on every card. Cause: `Window_StatusBase.drawActorLevel` spans 120 px (label width 48 + gap to x+84 + number width 36) but I only reserved 60 px, so the number drew off the right edge and was clipped.
+- **Fix:** New `_drawActorLevelCompact` helper packs "Lv" (24 px) + number (36 px, right-aligned) into 60 px total. Replaces the call to `drawActorLevel`.
+
+## 2026-05-26 — KB_MainMenuVisual v0.4.2: face graphics now render correctly
+
+- **Bug 1:** Faces invisible on actor cards despite being assigned in Database. Cause: `Window_Base.prototype.drawFace` crops the source 144×144 to the target rect rather than scaling — calling with width=79 just blits the top-left 79×79 fragment.
+- **Bug 2:** Even when faces are set, the PNG loads async; first-open after fresh boot draws nothing because `bitmap.isReady()` is false.
+- **Fix:** New `KB_ActorCardMenu._drawFaceScaled` helper does explicit scaled blt (source pw×ph → dest width×height) and attaches a `bitmap.addLoadListener` retry that triggers `refresh()` once the PNG is loaded. Self-heals on every menu open.
+- **Preload:** `KB_MenuPartyColumn.refresh` now calls `ImageManager.loadFace(m.faceName())` for each battle member before constructing cards — kicks the PNG load earlier so first-draw usually hits the cache.
+
+## 2026-05-26 — KB_MainMenuVisual v0.4.1: DP gauge visible on Hải's menu card (Step 8 free)
+
+- **Bug:** DP gauge wasn't appearing on Hải's actor card in the menu even though `KB_BongToiGauge`'s `placeGauge` hook fires on the chain. Cause: my card was 180px tall and gauges started at y=88, putting DP at y=160 — past the window's clipped content area.
+- **Fix:** Tightened identity layout — Name at y=0, Class+Level on the same row at y=24 (Level pinned to the right edge); gauges now start at y=56 instead of y=88. DP lands at y=128 inside the card.
+- **Card height bumped:** 180 → 190 (default param); gap reduced 8 → 4 to keep 3 cards within the 592px available column height (3×190 + 2×4 = 578).
+- Step 8 (Bóng Tối / Ngọc Hồn integration) is **largely free** thanks to the existing `placeGauge` chain hook — no extra wiring needed for DP gauge. Ngọc Hồn state indicator pending (different mechanism).
+- **Pending user:** bump `Party Card Height` from 180 → 190 and `Party Card Gap` from 8 → 4 in Plugin Manager (the new code defaults apply only to fresh installs; existing values stick).
+
+## 2026-05-26 — KB_MainMenuVisual v0.4: party column (Step 7)
+
+- **`KB_ActorCardMenu`** implemented (extends `Window_StatusBase`):
+  - Face graphic (55% scale) on left
+  - Name + Class + Level on right
+  - HP / MP / TP gauges via `placeBasicGauges` — this **automatically picks up the KB_BongToiGauge panel-mode hook**, so DP gauge will appear on Hải's card with no extra wiring in step 8
+  - Window frame hidden (`setBackgroundType(2)`); contentsBack paints a subtle dark wash + 1px hairline border
+- **`KB_MenuPartyColumn.refresh`** implemented: vertical stack of cards at the right edge of screen, one card per `$gameParty.battleMembers()`
+- **Stock status hidden** via `Scene_Menu.createStatusWindow` alias when `Enable Party Column` + `Hide Stock Status Window` are both true (defaults: party off, hide stock on)
+- **Try/catch** around card rendering with full error + stack trace
+- **New plugin params:** Party Column X (880), Party Card Width (380), Height (180), Gap (8), Hide Stock Status Window (true)
+- **Pending user:** flip `Enable Party Column` → true; boot test with party sizes 1, 2, 3 — verify cards stack cleanly and don't overlap atmosphere panel or bottom bar
+- **Next:** Step 8 — Bóng Tối / Ngọc Hồn integration (much of this is already free via placeBasicGauges hook)
+
+## 2026-05-26 — KB_MainMenuVisual v0.3: atmosphere panel (Step 6)
+
+- **`KB_MenuAtmosphereLayer.renderAtmosphere`** implemented:
+  - Source: `SceneManager.backgroundBitmap()` — the auto-captured snapshot of the map taken when the player opens the menu (no per-mapId cache needed; fresh per open)
+  - **Cover-fit scaling:** snapshot scales to fill the panel without letterbox; centered
+  - **Ink-wash filter chain:** PIXI ColorMatrixFilter desaturate → brightness pull-down (`ATMOS_BRIGHTNESS` param, default 0.80)
+  - **Mask:** PIXI.Graphics rect crops the cover-fit overflow
+  - **Vignette overlay:** radial-gradient Bitmap on top, `ATMOS_VIGNETTE` strength param (default 0.55)
+- **Graceful degradation:** fallback solid wash bitmap if `SceneManager.backgroundBitmap` returns null; logs warning if `PIXI.filters.ColorMatrixFilter` is unavailable (filters skipped, no crash)
+- **Try/catch around `renderAtmosphere`** with full error + stack trace logging
+- **New plugin params:** Atmosphere Panel X (280), Width (600), Top Margin (64), Bottom Margin (64), Brightness (0.80), Vignette Strength (0.55)
+- **Pending user:** flip `Enable Atmosphere Panel` to true; boot test on at least 2-3 different maps; tweak Brightness/Vignette to taste
+
+## 2026-05-26 — KB_MainMenuVisual v0.2.1: selection visibility fix
+
+- **Bug:** Brushstroke underline never painted; cursor moved invisibly between commands. Cause: `drawItemBackground` only fires during `redrawItem`/`drawAllItems`, but `select()` doesn't trigger either — so when the cursor moved, no redraw happened.
+- **Fix:** Override `Window_MenuCommand.select` to call `redrawItem(prev)` + `redrawItem(new)`, forcing the underline to repaint at the new position and clear from the old one. Also override `activate`/`deactivate` so the underline appears/disappears when the window gains/loses focus (e.g. when a submenu pushes on top).
+- Also tightened `drawItemBackground` guard to check `this.contentsBack` exists before drawing (avoids null-deref during early init).
+
+## 2026-05-26 — KB_MainMenuVisual v0.2: command column polish (Step 5)
+
+- **New plugin params:** `Enable Command Style`, `Command Column Width` (280), `Command Top Offset` (64), `Command Slide Distance` (60), `Command Slide Frames` (20), `Selection Color` (#a52a2a cinnabar)
+- **Layout:** `Scene_Menu.commandWindowRect` overridden to a vertical left column (0..280 px wide, full height); `statusWindowRect` shifted to start at sx(280) so VisuMZ's stock status doesn't overlap (will be replaced in step 7)
+- **Vertical commands:** `Window_MenuCommand.maxCols` patched to return 1 — every command on its own row
+- **Brushstroke selection:** `drawItemBackground` paints a 3px cinnabar bar on `contentsBack` at the bottom of the selected item; default rectangular cursor hidden via `refreshCursor` / `_refreshCursor` patches (same pattern as KB_SideViewBattleUI)
+- **Slide-in animation:** window starts off-screen left by `SLIDE_DIST` px, eases in over `SLIDE_FRAMES` frames with cubic-out easing
+- **Ink-blot icons deferred:** spec mentioned them, but no PNG assets exist yet — keeping VisuMZ IconSet placeholders; swap in step 5.5 when assets are authored
+- **Pending user:** Plugin Manager → KB_MainMenuVisual → set `Enable Command Style: true` → boot test
+- **Known risk:** VisuMZ may re-apply its own `Main Menu List Style: portrait` positioning. If column doesn't render in the left third, fallback is changing VisuMZ List Style to `default` or `mobile`
+
+## 2026-05-26 — KB_MainMenuVisual v0.1 skeleton created (Main Menu impl Step 4)
+
+- **New plugin:** `js/plugins/KB_MainMenuVisual.js` (v0.1, skeleton stage)
+- **Classes defined:** `KB_MenuHeader`, `KB_MenuAtmosphereLayer`, `KB_ActorCardMenu`, `KB_MenuPartyColumn`, `Scene_KBJournal`, `Window_KBJournalCommand`
+- **Behavior:** No visual change by default — all layers gated behind plugin params (`Enable Header`, `Enable Atmosphere Panel`, `Enable Party Column`, `Wire Journal Handler`, `Wire Map Handler`) which default OFF. Skeleton is safe-to-boot.
+- **Scene_Menu aliased:** `create` adds enabled layers as children; `createCommandWindow` adds handlers for `journal` + `map` symbols when wired
+- **Graceful degradation:** Scene_KBJournal disables Story Log / Monster Book entries if `CGMZ_Encyclopedia` is missing; disables Quest Log if `VisuMZ_2_QuestSystem` is missing. Never crashes.
+- **Try/catch around layer init** with full error + stack trace logging per project safety rules
+- **Pending user:** register in Plugin Manager (load order: after VisuMZ_1_MainMenuCore, after KB_SaveCore, near end of KB plugins block)
+- **Next:** Step 5 — command column polish (ink-blot icons, brushstroke selection, slide-in animation)
+
+## 2026-05-26 — Main Menu Step 3 boot-tested; Formation added, Load removed
+
+- **Boot test passed:** Step 3 (VisuMZ Command Window List + Status Graphic: none) successful. KB_Localization `{key}` codes resolve correctly inside VisuMZ command windows — no additional plugin hook needed.
+- **Added command:** Formation → Đội Hình (隊形). Useful party-reorder command in menu.
+- **Removed command:** Load (was an unintended extra). KB_SaveCore already unifies save AND load in one scene; redundant top-level Load command removed. Mobile-friendly choice.
+- **Final menu count:** 10 commands (was 9): Vật Phẩm, Kỹ Năng, Trang Bị, Trạng Thái, Đội Hình, Nhật Ký, Bản Đồ, Thiết Đặt, Save, Rời Đi.
+- **Deferred polish:** "Vàng" → "Lượng" gold unit override and "Time" → "Thời Gian" playtime label deferred to later polish pass (per user direction).
+- **Memory updated:** `{key}` ↔ VisuMZ MainMenuCore param compatibility confirmed.
+
+## 2026-05-26 — Menu localization CSVs created (Main Menu impl Step 2)
+
+- **Added:** `locales/vi/Menu.csv` (13 keys, Hán Việt)
+- **Added:** `locales/en/Menu.csv` (13 keys, English)
+- Keys: `menu_cmd_*` (9 main menu commands), `menu_unit_gold`, `journal_cmd_*` (3 journal hub commands)
+- Pending user action: register `Menu` in KB_Localization plugin params; disable CGMZ_QuestSystem, Galv_QuestLog, DKTools_Localization, DKTools in Plugin Manager (impl Step 1)
+
+## 2026-05-26 — Main Menu spec: open questions resolved; Journal hub design added
+
+- **Skill label:** "Kỹ Năng" (user pick over more literary "Pháp Thuật"/"Thần Thuật" — prefers Hán Việt that stays everyday-legible)
+- **Quit label:** "Rời Đi" (kept; "Hồi Gia" 回家 alternative declined)
+- **Journal structure:** Nhật Ký is now a **hub scene**, not a direct push. Contains three sub-entries: Hồi Ký 回記 (Story Log → CGMZ_Encyclopedia Lore category), Yêu Phổ 妖譜 (Monster Book → CGMZ_Encyclopedia Bestiary category), Nhiệm Vụ 任務 (Quest Log → VisuMZ_2_QuestSystem)
+- **Location names:** sourced from existing `Map*_*.csv` files; no new locations CSV
+- **Spec updates:** Added Journal hub section + `Scene_KBJournal` + `Window_KBJournalCommand` classes to `docs/spec/main-menu.md`; bumped implementation plan from 12 to 14 steps
+- **Glossary updates:** Added Hồi Ký / Yêu Phổ entries; corrected Skill term to Kỹ Năng
+
+## 2026-05-26 — Main Menu spec drafted; quest plugin decision; Hán Việt UI vocabulary
+
+- **New spec:** `docs/spec/main-menu.md` — full design for in-game pause menu redesign as `KB_MainMenuVisual.js`. Sumi-e ink-wash aesthetic, 3-column layout (commands / atmospheric map panel / party cards with HP/MP/Bóng Tối/Ngọc Hồn gauges).
+- **Quest plugin decision:** Picked **VisuMZ_2_QuestSystem**. Will disable `CGMZ_QuestSystem` and `Galv_QuestLog`. Rationale: same suite as MainMenuCore, KB_Localization-compatible text codes for translation flow.
+- **Localization plugin decision:** Confirmed `KB_Localization` is the sole i18n system. `DKTools_Localization` to be disabled.
+- **UI vocabulary policy:** All in-game UI text uses Hán Việt (Sino-Vietnamese) vocabulary. Exceptions: `HP`, `MP`, `TP`, `Save` remain English (user preference). Vocabulary added to `docs/glossary.md`.
+- **No Chinese characters in UI:** All Hán/汉字 removed from menu mockups; atmosphere comes from Hán Việt romanization + ink-wash visuals only.
+- **Tasks added:** 12-step implementation plan tracked under "Custom systems — KB plugins to build" in `docs/tasks.md`. Quest plugin pick task marked done.
+
 ## 2026-05-25 — KB_BongToiGauge v1.5: panel-mode rendering + label refinement
 
 - **New feature — panel-mode rendering (default):** `drawMode: "panel"` renders DP gauge INSIDE Hải's VisuMZ Sideview panel, directly below TP gauge at the same X-position. Gauge inherits the panel's theme (colors, scale, font). Panel gauge is 96px wide (configurable via `panelGaugeWidth` param).

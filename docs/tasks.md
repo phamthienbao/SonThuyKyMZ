@@ -29,7 +29,7 @@ See `docs/proposal.md` for full context.
 - [ ] (P1) (S) Audit and remove test switches (`LongQuest`, `findLong`, `Michau_onmap`)
 - [ ] (P1) (S) Audit and remove test variables (`findLong`, `takeLong`, `Menu`, `filter`)
 - [ ] (P2) (M) Archive ~113 dormant plugins to `js/plugins/_archive/` (pending D5)
-- [ ] (P2) (S) Pick one quest system: VisuMZ_2_QuestSystem vs CGMZ_QuestSystem; disable the other
+- [x] (P2) (S) Pick one quest system: **VisuMZ_2_QuestSystem** chosen — disable CGMZ_QuestSystem + Galv_QuestLog. Decision: same suite as MainMenuCore, KB_Localization-compatible text codes. See `docs/spec/main-menu.md`.
 
 ---
 
@@ -81,6 +81,24 @@ See `docs/proposal.md` for full context.
 - [ ] (P1) (L) Build `KB_SummonSystem.js` (Thần Thú once-per-battle skills)
 - [ ] (P2) (M) Build `KB_Reputation.js` (NPC rep tracking, shop discounts, dialogue gating)
 - [ ] (P3) (M) Build `KB_MoralChoice.js` (central tracker for ending paths)
+- [~] (P1) (L) Build `KB_MainMenuVisual.js` (in-game pause menu, sumi-e ink-wash) — spec at `docs/spec/main-menu.md`
+  - [x] Step 1: Disable CGMZ_QuestSystem, Galv_QuestLog, DKTools, DKTools_Localization in Plugin Manager ✅ done 2026-05-26
+  - [x] Step 2: Create `locales/vi/Menu.csv` + `locales/en/Menu.csv` (13 keys: 9 menu + 1 unit + 3 journal hub) ✅ done 2026-05-26; `Menu` registered in KB_Localization params
+  - [x] Step 3: Configure VisuMZ_1_MainMenuCore ✅ done 2026-05-26 — KB_Localization `{key}` resolves in command labels; 10 commands (Formation added, Load removed)
+  - [ ] Step 3.5 (deferred polish): override `TextManager.currencyUnit` → "Lượng"; translate Playtime Window label → "Thời Gian"
+  - [x] Step 4: Skeleton plugin ✅ shipped 2026-05-26 (v0.1) — KB_MenuHeader, KB_MenuAtmosphereLayer, KB_ActorCardMenu, KB_MenuPartyColumn, Scene_KBJournal, Window_KBJournalCommand defined; registered in Plugin Manager; boots clean
+  - [x] Step 5: Command column polish ✅ shipped 2026-05-26 (v0.2 + v0.2.1) — vertical left column, brushstroke cinnabar underline selection, cubic-out slide-in animation, default cursor hidden. Ink-blot icon assets still pending (using IconSet placeholders for now)
+  - [x] Step 6: Atmospheric panel ✅ shipped 2026-05-26 (v0.3) — SceneManager.backgroundBitmap source, cover-fit scaling, PIXI ColorMatrixFilter chain (desaturate + brightness 0.80), mask, radial vignette overlay 0.55. Verified across 3 maps
+  - [x] Step 7: Party column ✅ shipped 2026-05-26 (v0.4 + v0.4.1–v0.4.4) — KB_ActorCardMenu (Window_StatusBase); scaled face graphics with async load-listener self-heal; name prominent + class/level as dim subtitle row; HP/MP/TP gauges via placeBasicGauges; transparent window frame; subtle dark card wash + hairline border; hides VisuMZ stock status. Verified with 3-actor party
+  - [x] Step 8a: Bóng Tối DP gauge integration ✅ free via KB_BongToiGauge `placeGauge` panel-mode chain hook — appears automatically on Hải's card below TP. Card height bumped to 190 to fit the DP row
+  - [ ] Step 8b: Ngọc Hồn state indicator on actor cards (different mechanism — state icon, not gauge)
+  - [ ] Step 9: Header band (title + location + playtime + gold + Lượng)
+  - [ ] Step 10: Journal hub scene — `Scene_KBJournal` skeleton exists; wire `menu_cmd_journal` handler (flip `Wire Journal Handler` param) and verify it pushes the hub
+  - [ ] Step 11: Wire Nhiệm Vụ → VisuMZ_2_QuestSystem; author one sample quest using `{quest_*}` keys
+  - [ ] Step 12: Wire Hồi Ký + Yêu Phổ → CGMZ_Encyclopedia (Lore + Bestiary categories); author one sample lore entry; verify bestiary auto-registers
+  - [ ] Step 13: Wire Bản Đồ → CGMZ_FastTravel (flip `Wire Map Handler` param)
+  - [ ] Step 14: QA pass, log regressions to `docs/qc/`
+  - [ ] Authoring (parallel): assets for ink-blot command icons (9 PNGs at ~48×48); replace IconSet placeholders
 
 ---
 

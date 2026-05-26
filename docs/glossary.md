@@ -75,3 +75,29 @@ Triangle: Sơn (Earth) > Thủy (Water) > Hỏa (Fire) > Sơn. Light ↔ Darknes
 | Kinh Đô | Kinh Do (capital city) | — | **NOT BUILT** — Ch.3/4 hub |
 
 > Existing maps named "SonTinh's Town", "Hero's Hometown", "SonTinhHome", "Peaceful Farm" reflect the older Sơn-Tinh-as-hero design. They can likely be repurposed for Văn Lang towns; renaming TBD.
+
+## UI Vocabulary (Hán Việt)
+
+All in-game UI text uses **Hán Việt** (Sino-Vietnamese) vocabulary for literary register matching the Văn Lang setting. **Exceptions:** `HP`, `MP`, `TP`, and `Save` are kept in English (user preference).
+
+| English | Vietnamese (Hán Việt) | Etymology | Localization key |
+|---|---|---|---|
+| Item | Vật Phẩm | 物品 | `menu_cmd_item` |
+| Skill | Kỹ Năng | 技能 (user pick — everyday legibility over more literary "Pháp Thuật" 法術 / "Thần Thuật" 神術) | `menu_cmd_skill` |
+| Equipment | Trang Bị | 裝備 | `menu_cmd_equip` |
+| Weapon | Binh Khí | 兵器 | (sub-screen) |
+| Armor | Phòng Cụ | 防具 | (sub-screen) |
+| Status | Trạng Thái | 狀態 | `menu_cmd_status` |
+| Formation | Đội Hình | 隊形 | `menu_cmd_formation` |
+| Journal (hub) | Nhật Ký | 日記 | `menu_cmd_journal` |
+| Story Log | Hồi Ký | 回記 | `journal_cmd_story` |
+| Monster Book | Yêu Phổ | 妖譜 | `journal_cmd_bestiary` |
+| Quest Log | Nhiệm Vụ | 任務 | `journal_cmd_quest` |
+| Map | Bản Đồ | 版圖 | `menu_cmd_map` |
+| Options | Thiết Đặt | 設定 | `menu_cmd_options` |
+| Save | Save | (untranslated, user pref) | `menu_cmd_save` |
+| Quit | Rời Đi | plain Vietnamese; "Hồi Gia" 回家 alt pending pick | `menu_cmd_quit` |
+| Gold unit | Lượng | 兩 (taels) | `menu_unit_gold` |
+| HP / MP / TP | (untranslated, user pref) | — | — |
+
+Reference: `docs/spec/main-menu.md` is the authoritative source for menu terminology decisions.

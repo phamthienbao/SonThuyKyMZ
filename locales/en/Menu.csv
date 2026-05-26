@@ -1,0 +1,15 @@
+Key;en
+menu_cmd_item;Items
+menu_cmd_skill;Skills
+menu_cmd_equip;Equipment
+menu_cmd_status;Status
+menu_cmd_formation;Formation
+menu_cmd_journal;Journal
+menu_cmd_map;Map
+menu_cmd_options;Options
+menu_cmd_save;Save
+menu_cmd_quit;Quit
+menu_unit_gold;Gold
+journal_cmd_story;Story Log
+journal_cmd_bestiary;Bestiary
+journal_cmd_quest;Quest Log
