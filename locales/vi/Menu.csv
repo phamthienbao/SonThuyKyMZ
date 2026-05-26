@@ -16,3 +16,5 @@ journal_cmd_bestiary;Quái Phổ
 journal_cmd_quest;Nhiệm Vụ
 journal_cmd_lore;Truyền Thuyết
 journal_scene_title;Nhật Ký
+menu_hint_switch_actor;Đổi Người
+menu_hint_switch_category;Đổi Loại

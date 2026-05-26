@@ -2,6 +2,94 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-26 — KB_MainMenuVisual v0.6.15: runtime-patch ElementStatusCore General-tab DrawJS for DP fit
+
+User asked to move the HP/MP/TP/DP gauge stack up so DP isn't pressed against the bottom edge of the panel. The General tab's layout comes from `VisuMZ_1_ElementStatusCore`'s user-configurable `DrawJS` callback, which reserves `basicDataHeight = lineHeight * 6.5` for the actor info block (name + level + class + icons + HP/MP/TP = ~6.5 rows). When KB_BongToiGauge's chain hook adds DP as a 4th gauge, it lands outside that reserved area.
+
+- **At plugin load** (`ENABLE_PARTY` branch), if `VisuMZ.ElementStatusCore.Settings.StatusMenuList` exists and contains the General entry, replace its `DrawJS` function with a near-identical reimplementation that sets `basicDataHeight = lineHeight * 7.5` (was 6.5). Everything else preserved verbatim — actor graphic, name/level/class/icons drawing, gauge stack, EXP + Biography panel on the right half.
+- Net effect: the whole actor info block shifts ~36 px up; the 4-gauge stack now sits cleanly inside the panel.
+- The class-subtitle hook from v0.6.13/14 still fires inside the patched DrawJS (it still calls `drawTextEx(className, …)`).
+- Wrapped in try/catch with debug-safe `console.error` — silently no-ops if ElementStatusCore isn't installed.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.14: resolve KB_Localization in class subtitle
+
+v0.6.13's `drawTextEx` hook fired correctly — class rendered at subtitle font/color in Scene_Status. But the text showed as the raw localization key `{classStudent}` instead of the resolved Vietnamese name "Sinh Viên".
+
+Cause: classes 11/12/13 store their `name` in `data/Classes.json` as a KB_Localization placeholder string (e.g., `{classStudent}`). VisuMZ's `drawTextEx` would have routed through `convertEscapeCharacters` → which calls `KBLocalization.process()` → resolves the key. My direct `contents.drawText` skipped that chain.
+
+Fix: in the class-detection branch, run `KBLocalization.process(text)` on the raw class name before drawing. Guarded so it falls through to the raw text if KBLocalization isn't loaded.
+
+DP gauge status: visible at the bottom edge of the actor info window with partial clipping ("DP 0" readable). User implicitly accepted this state in v0.6.13. Cleaner fix via DrawJS patching still available on request.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.13: drawTextEx class hook + DP restored
+
+Inspected the actual obfuscated DrawJS callback that ElementStatusCore's General tab uses, and found two things:
+1. Class is drawn via `this.drawTextEx(className, sx, sy, sw)` — **not** `drawText`. v0.6.12's drawText interception missed it.
+2. The tab's gauge area reserves `basicDataHeight = lineHeight * 6.5` total, of which ~4.5 rows go to name/level/class/icons and ~2 rows for HP/MP/TP. KB_BongToiGauge's DP gauge is the 4th — falls outside the reserved area.
+
+Changes from v0.6.12:
+- **Class hook moved to `drawTextEx`**. Just swapping `this.contents.fontSize` before delegating doesn't work because `drawTextEx` calls `resetFontSettings()` internally, undoing our pre-set. New approach: when the text equals `actor.currentClass().name`, bypass the escape-processing path entirely and call `this.contents.drawText(text, ...)` directly with subtitle font/color. Class names are plain strings, no text codes — safe to skip drawTextEx's processing.
+- **DP suppression reverted** (user prefers a partly clipped DP gauge over a missing one). The `placeGauge` filter added in v0.6.12 was removed.
+
+Known caveat (documented, not fixed): DP gauge will sit at the very bottom edge of the actor info window and may be partly clipped, because the General tab's `DrawJS` reserves only ~3 gauge rows. A clean fix requires rewriting the DrawJS layout — feasible by patching `VisuMZ.ElementStatusCore.Settings.StatusMenuList` at runtime, but invasive enough to warrant explicit user opt-in.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.12: target Window_StatusData directly
+
+v0.6.11 still no visible change. Investigation reveals the Scene_Status General tab is rendered by **`VisuMZ_1_ElementStatusCore.Window_StatusData`** (a separate plugin from MainMenuCore) — and that window:
+- Uses obfuscated method names like `_0x2e4721(0x158)` so we can't reliably target specific methods.
+- Never calls `drawActorClass` or `drawActorSimpleStatus` — it draws actor info via direct `drawText` calls in obfuscated functions.
+- Calls `placeGauge` individually for HP/MP/TP, which triggers KB_BongToiGauge's chain hook → DP appended → clips.
+
+Two targeted hacks for ENABLE_PARTY mode:
+- **DP suppression in Scene_Status only.** Aliased `Window_StatusBase.prototype.placeGauge`: when `type === 'kb_bongtoi'` and the active scene is `Scene_Status`, skip. DP stays visible everywhere else (main menu party column, Scene_Skill, battle). Trade-off: in Scene_Status the player loses DP visibility, but they have other places to see it.
+- **Class subtitle via drawText interception.** Aliased `Window_StatusData.prototype.drawText`: if the text equals `this._actor.currentClass().name`, swap to `SUBTITLE_FONT` + `SUBTITLE_COLOR` for the duration of that one call. Restores font/color afterward. Works regardless of which obfuscated method draws class — as long as it eventually routes through `drawText`. Fragile only if VisuMZ draws another string that happens to equal the class name (unlikely).
+
+Both `typeof X !== 'undefined'` guarded so a setup without ElementStatusCore still loads cleanly.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.11: Scene_Status class subtitle + window shrink (iteration)
+
+v0.6.10's `mainAreaHeight` cap fixed most scenes but VisuMZ's Scene_Status General-tab window uses absolute rects that ignore mainAreaHeight, so the DP gauge still clipped. Also v0.6.9's `Window_StatusBase.drawActorClass` override didn't reach this layout — VisuMZ likely overrides drawActorClass directly on `Window_Status` (the subclass) which takes precedence.
+
+- **`Window_Status.prototype.drawActorClass` override added** (separate from the existing Window_StatusBase one). Uses `SUBTITLE_FONT` + `SUBTITLE_COLOR`. Same body, attached at the subclass level so VisuMZ's override doesn't shadow it.
+- **`Scene_Status.statusWindowRect` aliased** to cap `rect.y + rect.height` at `Graphics.boxHeight - sy(HINT_H) - sy(20)` (20-px breathing room above the hint). Only shrinks; never grows.
+- Both gated on `ENABLE_PARTY`, both guarded with `typeof X !== 'undefined'` so a stripped-down setup without VisuMZ still works.
+- **Caveat**: if VisuMZ's Window_Status draws gauges at absolute pixel positions instead of respecting `innerHeight`, the window-rect cap will clip them instead of moving them up. Iteration #1 — user to confirm in-game whether the gauges are now visible above the hint or just chopped at the new boundary.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.10: reserve bottom hint space so gauges don't clip
+
+User-reported screenshot: in `Scene_Status` (General tab), the actor's HP/MP/TP/DP gauge stack at the bottom-left was being overlapped by the v0.6.7 centered hint bar — `DP 0` clipped behind `[Q/W] Đổi Người [Z] Chọn [X] Hồi`.
+
+Root cause: stock MZ's `Scene_MenuBase.mainAreaHeight` reserves bottom space assuming VisuMZ's button-assist window will sit there (~60–80 px). Since we hide that and add our own centered hint, scenes naturally extend their content into the space we now occupy.
+
+- **`Scene_MenuBase.prototype.mainAreaHeight` aliased**, gated on `USE_CUSTOM_HINT`. Returns `Math.min(base, hintTop - mainAreaTop())` — caps at min(stock height, available-above-hint), so we never INCREASE the area, only tighten it when stock leaves more room than the hint needs.
+- Universal fix: applies to all Scene_MenuBase subclasses (Scene_Status, Scene_Skill, Scene_Equip, Scene_Item, Scene_Save, Scene_KBJournal, etc.). Whatever the scene's window layout, content stops above the hint.
+- Pairs naturally with v0.6.9's `Scene_Skill.statusWindowHeight` + `Window_SkillStatus.refresh` overrides — those concentrate the DP row up; this prevents the bottom of any scene from sliding under the hint.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.9: class subtitle + DP gauge fit on Scene_Skill
+
+User-reported screenshot: on Scene_Skill, the actor class (`Sinh Viên`) rendered at the same big font as the actor name, and the DP gauge (KB_BongToiGauge's 4th row on Hải) was truncated — only the top edge of "DP 0" peeked above the window bottom.
+
+Two fixes, both gated on `ENABLE_PARTY`:
+
+- **`Window_StatusBase.prototype.drawActorClass` override** — mirrors the subtitle treatment from `KB_ActorCardMenu`: uses `SUBTITLE_FONT` (18-px default) and `SUBTITLE_COLOR` (warm gray ink). fontSize + textColor saved + restored around the draw so it doesn't leak into subsequent drawing. Applies everywhere class is drawn — Scene_Skill / Equip / Status header rows AND the full-page Scene_Status. Name now dominates, class reads as meta.
+- **Scene_Skill height + layout** — `Scene_Skill.statusWindowHeight` overridden to `calcWindowHeight(5, true)` (stock was 3 rows, ~132 px → bumped to ~204 px). `Window_SkillStatus.refresh` overridden to draw the actor block top-aligned (`y=0`) instead of stock's vertical-center (`h/2 - 1.5*lineHeight`) — top-aligned packs the 5 rows of right-column content (class, HP, MP, TP, DP) without needing a 7-row-tall window.
+- Scene_Equip's `Window_EquipStatus` doesn't call `placeBasicGauges` (it shows param diffs on equip), so no DP fix needed there. Scene_Status's `Window_Status` is full-page — class shrinks via the global override; gauges have plenty of room.
+
+## 2026-05-26 — KB_MainMenuVisual v0.6.8: scene-aware hint entries
+
+v0.6.7 made the hint universal but stripped the scene-specific context (Q/W actor switch, Q/W category switch). User asked for those back. Now the hint introspects the scene at paint time and prepends one extra entry when appropriate:
+
+- **Actor cycling** (`Q/W: Đổi Người` / `Switch Ally`) — shown when scene is `Scene_Skill` / `Scene_Equip` / `Scene_Status` / `Scene_ClassChange` (if loaded) AND `$gameParty.size() >= 2`. The party-size guard prevents a misleading hint when there's only one ally.
+- **Category cycling** (`Q/W: Đổi Loại` / `Switch Tab`) — shown when scene is `Scene_Item` / `Scene_Shop`.
+- Other scenes (Journal, Save, Options, Quest, Encyclopedia, FastTravel, etc.) keep the plain two-entry hint.
+
+Implementation:
+- `_paint()` now joins an entries array (`map(e => [${key}] ${label}).join(sep)`) rather than hardcoding two strings.
+- New `_getEntries()` builds `[ optional scene entry, OK, Cancel ]`.
+- New `_sceneEntry()` does the instanceof checks with `typeof X !== 'undefined'` guards so missing classes don't throw.
+- Two new locale keys — `menu_hint_switch_actor` (vi `Đổi Người` / en `Switch Ally`) and `menu_hint_switch_category` (vi `Đổi Loại` / en `Switch Tab`). Resolved via the existing `_t()` helper with sensible Vietnamese fallbacks.
+- Scene_Quest / CGMZ_Scene_Encyclopedia / Scene_FastTravel deliberately NOT in the actor or category list — their Q/W bindings aren't verified against our specific plugin stack. Easy to add when confirmed.
+
 ## 2026-05-26 — KB_MainMenuVisual v0.6.7: centered `[Z] Chọn  [X] Hồi` hint on all menu scenes
 
 Previously the custom centered hint only showed on Scene_Menu — Skill / Equip / Status / Quest / Journal / etc. all still rendered VisuMZ's right-aligned button-assist bar (with `< >`:Switch Ally, bottle:Select, bottle:Back). User asked to use the clean centered hint everywhere for consistency.

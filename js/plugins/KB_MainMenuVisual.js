@@ -1,9 +1,9 @@
 //=============================================================================
-// KB_MainMenuVisual.js  v0.6.7
+// KB_MainMenuVisual.js  v0.6.15
 //=============================================================================
 /*:
  * @target MZ
- * @plugindesc [v0.6.7] Sumi-e ink-wash main menu — centered hint on all menu scenes.
+ * @plugindesc [v0.6.15] Sumi-e ink-wash main menu — General-tab DrawJS patch for DP gauge fit.
  * @author KB
  *
  * @help
@@ -680,21 +680,78 @@ Imported.KB_MainMenuVisual = true;
             bmp.fontSize = HEADER_INFO_FONT;
             bmp.textColor = HEADER_INFO_COL;
 
-            const okKey     = this._localize(HINT_OK_KEY);
-            const okLabel   = this._localize(HINT_OK_LABEL);
-            const cancelKey = this._localize(HINT_CANCEL_KEY);
-            const cancelLab = this._localize(HINT_CANCEL_LABEL);
-
-            const ok     = `[${okKey}] ${okLabel}`;
-            const cancel = `[${cancelKey}] ${cancelLab}`;
-            const sep    = '     ';
-            const line   = ok + sep + cancel;
+            const entries = this._getEntries();
+            const sep = '     ';
+            const line = entries.map(e => `[${e.key}] ${e.label}`).join(sep);
 
             const tw = bmp.measureTextWidth(line);
             const tx = Math.max(0, Math.floor((w - tw) / 2));
             const ty = Math.floor((h - HEADER_INFO_FONT) / 2);
             bmp.drawText(line, tx, ty, tw + 4, HEADER_INFO_FONT + 4, 'left');
         }
+
+        // Build the hint entries in left-to-right order. Scene-specific
+        // entries (actor cycling, category switching) come BEFORE the
+        // common OK/Cancel pair so they read as "context | confirm | back".
+        _getEntries() {
+            const entries = [];
+            const sceneEntry = this._sceneEntry();
+            if (sceneEntry) entries.push(sceneEntry);
+            entries.push({
+                key:   this._localize(HINT_OK_KEY),
+                label: this._localize(HINT_OK_LABEL),
+            });
+            entries.push({
+                key:   this._localize(HINT_CANCEL_KEY),
+                label: this._localize(HINT_CANCEL_LABEL),
+            });
+            return entries;
+        }
+
+        _sceneEntry() {
+            const scene = SceneManager._scene;
+            if (!scene) return null;
+            // Actor cycling (Q/W) — only meaningful when the party has at
+            // least 2 members and the scene is actor-personal.
+            const actorScenes = [
+                typeof Scene_Skill       !== 'undefined' && Scene_Skill,
+                typeof Scene_Equip       !== 'undefined' && Scene_Equip,
+                typeof Scene_Status      !== 'undefined' && Scene_Status,
+                typeof Scene_ClassChange !== 'undefined' && Scene_ClassChange,
+            ].filter(Boolean);
+            const partySize = (typeof $gameParty !== 'undefined' && $gameParty)
+                ? $gameParty.size()
+                : 0;
+            if (partySize >= 2 && actorScenes.some(c => scene instanceof c)) {
+                return {
+                    key:   'Q/W',
+                    label: this._t('menu_hint_switch_actor', 'Đổi Người'),
+                };
+            }
+            // Category switching (Q/W) — Item / Shop have category windows.
+            const catScenes = [
+                typeof Scene_Item !== 'undefined' && Scene_Item,
+                typeof Scene_Shop !== 'undefined' && Scene_Shop,
+            ].filter(Boolean);
+            if (catScenes.some(c => scene instanceof c)) {
+                return {
+                    key:   'Q/W',
+                    label: this._t('menu_hint_switch_category', 'Đổi Loại'),
+                };
+            }
+            return null;
+        }
+
+        _t(key, fallback) {
+            if (typeof KB_Localization !== 'undefined' && KB_Localization.getText) {
+                return KB_Localization.getText(key) || fallback;
+            }
+            if (typeof KBLocalization !== 'undefined' && KBLocalization.getText) {
+                return KBLocalization.getText(key) || fallback;
+            }
+            return fallback;
+        }
+
         _localize(text) {
             if (!text) return text;
             if (typeof KBLocalization !== 'undefined' && KBLocalization.process) {
@@ -1114,6 +1171,228 @@ Imported.KB_MainMenuVisual = true;
         }
     }
     window.Scene_KBJournal = Scene_KBJournal;
+
+    //==========================================================
+    // Personal-scene status polish (Scene_Skill / Equip / Status):
+    //  • Class text uses the same SUBTITLE_FONT + SUBTITLE_COLOR
+    //    treatment as KB_ActorCardMenu on the party column — class
+    //    is meta info, name should dominate.
+    //  • Scene_Skill: bump status window to 5 rows and draw the
+    //    actor block top-aligned so KB_BongToiGauge's DP gauge row
+    //    fits without clipping (was truncated in v0.6.8 and prior).
+    //==========================================================
+    if (ENABLE_PARTY) {
+        Window_StatusBase.prototype.drawActorClass = function(actor, x, y, width) {
+            const w = width || 168;
+            const name = (actor && actor._classId)
+                ? actor.currentClass().name
+                : '';
+            const prevSize  = this.contents.fontSize;
+            const prevColor = this.contents.textColor;
+            this.contents.fontSize  = SUBTITLE_FONT;
+            this.contents.textColor = SUBTITLE_COLOR;
+            this.drawText(name, x, y, w);
+            this.contents.fontSize  = prevSize;
+            this.contents.textColor = prevColor;
+        };
+
+        Scene_Skill.prototype.statusWindowHeight = function() {
+            return this.calcWindowHeight(5, true);
+        };
+
+        Window_SkillStatus.prototype.refresh = function() {
+            Window_StatusBase.prototype.refresh.call(this);
+            if (!this._actor) return;
+            const x = this.colSpacing() / 2;
+            const h = this.innerHeight;
+            this.drawActorFace(this._actor, x + 1, 0, 144, h);
+            // Top-aligned (y=0) instead of stock vertical-center, so
+            // the extra DP gauge row fits without needing a 7-row
+            // tall status window.
+            this.drawActorSimpleStatus(this._actor, x + 180, 0);
+        };
+
+        // Window_Status (full Status detail scene) — VisuMZ may override
+        // drawActorClass on the subclass directly, bypassing our
+        // Window_StatusBase override. Define it on the subclass too.
+        if (typeof Window_Status !== 'undefined') {
+            Window_Status.prototype.drawActorClass = function(actor, x, y, width) {
+                const w = width || 168;
+                const name = (actor && actor._classId)
+                    ? actor.currentClass().name
+                    : '';
+                const prevSize  = this.contents.fontSize;
+                const prevColor = this.contents.textColor;
+                this.contents.fontSize  = SUBTITLE_FONT;
+                this.contents.textColor = SUBTITLE_COLOR;
+                this.drawText(name, x, y, w);
+                this.contents.fontSize  = prevSize;
+                this.contents.textColor = prevColor;
+            };
+        }
+
+        // Scene_Status: VisuMZ_1_ElementStatusCore's General tab is
+        // drawn via a user-configurable DrawJS callback that calls
+        // `drawTextEx(className, ...)` for the class (NOT drawText).
+        // Intercepting drawTextEx catches the class draw.
+        //
+        // drawTextEx calls resetFontSettings internally and processes
+        // escape codes, so simply pre-setting contents.fontSize doesn't
+        // stick. Instead, when the text equals the actor's class name
+        // we BYPASS the escape-processing path and draw directly with
+        // contents.drawText at the subtitle font/color. Class names
+        // never need text-code processing — they're plain strings.
+        if (typeof Window_StatusData !== 'undefined') {
+            const _WSD_drawTextEx = Window_StatusData.prototype.drawTextEx
+                || Window_Base.prototype.drawTextEx;
+            Window_StatusData.prototype.drawTextEx = function(text, x, y, width) {
+                const actor = this._actor;
+                const className = (actor && actor._classId)
+                    ? actor.currentClass().name
+                    : null;
+                if (className && text === className) {
+                    // Resolve KB_Localization placeholders (e.g. `{classStudent}`)
+                    // because contents.drawText doesn't process them — only
+                    // drawTextEx's convertEscapeCharacters chain does.
+                    const resolved = (typeof KBLocalization !== 'undefined'
+                        && KBLocalization.process)
+                        ? KBLocalization.process(text)
+                        : text;
+                    const ps = this.contents.fontSize;
+                    const pc = this.contents.textColor;
+                    this.contents.fontSize  = SUBTITLE_FONT;
+                    this.contents.textColor = SUBTITLE_COLOR;
+                    const w = width || this.contents.measureTextWidth(resolved);
+                    this.contents.drawText(resolved, x, y, w, this.lineHeight(), 'left');
+                    this.contents.fontSize  = ps;
+                    this.contents.textColor = pc;
+                    return w;
+                }
+                return _WSD_drawTextEx.call(this, text, x, y, width);
+            };
+        }
+        // DrawJS patch (v0.6.15): the General tab's user-configurable
+        // DrawJS reserves `basicDataHeight = lineHeight * 6.5` for the
+        // actor info block, which fits 3 gauges (HP/MP/TP). KB_BongToi
+        // adds a 4th (DP) below TP, pushing it past the bottom edge.
+        // Replace the DrawJS function with one identical except for
+        // `basicDataHeight = lineHeight * 7.5` — shifts the whole block
+        // up 1 lineHeight (~36 px) so DP sits cleanly inside the panel.
+        try {
+            const ESC = (typeof VisuMZ !== 'undefined') && VisuMZ.ElementStatusCore;
+            const list = ESC && ESC.Settings && ESC.Settings.StatusMenuList;
+            const entry = list && list.find && list.find(e => e && e.Symbol === 'general');
+            if (entry && typeof entry.DrawJS === 'function') {
+                entry.DrawJS = function() {
+                    const maxExp = '-------';
+                    const lineHeight = this.lineHeight();
+                    const gaugeLineHeight = this.gaugeLineHeight();
+                    // KB patch: was lineHeight * 6.5. Bumped so DP fits.
+                    const basicDataHeight = lineHeight * 7.5;
+                    const actor = this._actor;
+                    const padding = this.itemPadding();
+                    const halfWidth = this.innerWidth / 2;
+                    let rect = new Rectangle(0, 0, halfWidth, this.innerHeight);
+                    let x = 0;
+                    let y = 0;
+
+                    // Draw Actor Graphic
+                    this.drawActorGraphic(0, this.innerWidth / 2);
+
+                    // Smaller Data Area
+                    let sx = rect.x;
+                    let sy = Math.max(rect.y, rect.y + (rect.height - basicDataHeight));
+                    let sw = rect.width;
+                    let sh = rect.y + rect.height - sy;
+
+                    // Actor Name
+                    this.drawItemDarkRect(0, sy, sw, lineHeight, 2);
+                    this.drawText(actor.name(), sx, sy, sw, 'center');
+
+                    // Actor Level
+                    sx = rect.x + Math.round((rect.width - 128) / 2);
+                    sy += lineHeight;
+                    this.drawItemDarkRect(0, sy, sw, lineHeight);
+                    this.drawActorLevel(actor, sx, sy);
+
+                    // Actor Class (uses drawTextEx; our class-subtitle hook
+                    // upstream catches the call and resolves KB_Localization).
+                    const className = actor.currentClass().name;
+                    sx = rect.x + Math.round((rect.width - this.textSizeEx(className).width) / 2);
+                    sy += lineHeight;
+                    this.drawItemDarkRect(0, sy, sw, lineHeight);
+                    this.drawTextEx(className, sx, sy, sw);
+
+                    // Actor Icons
+                    sx = rect.x + Math.round((rect.width - 144) / 2);
+                    sy += lineHeight;
+                    this.drawItemDarkRect(0, sy, sw, lineHeight);
+                    this.drawActorIcons(actor, sx, sy);
+
+                    // Gauges (HP/MP/TP — KB_BongToi's chain hook adds DP after TP)
+                    sx = rect.x + Math.round((rect.width - 128) / 2);
+                    sy += lineHeight;
+                    this.drawItemDarkRect(0, sy, sw, this.innerHeight - sy);
+                    this.placeGauge(actor, 'hp', sx, sy);
+                    sy += gaugeLineHeight;
+                    this.placeGauge(actor, 'mp', sx, sy);
+                    sy += gaugeLineHeight;
+                    if ($dataSystem.optDisplayTp) {
+                        this.placeGauge(actor, 'tp', sx, sy);
+                    }
+
+                    // Second Half — EXP + Biography (unchanged from original)
+                    rect = new Rectangle(halfWidth, 0, halfWidth, this.innerHeight);
+                    this.changeTextColor(ColorManager.systemColor());
+                    this.drawItemDarkRect(rect.x, rect.y, rect.width, lineHeight, 2);
+                    this.drawText(TextManager.exp, rect.x, rect.y, rect.width, 'center');
+                    const expHeight = lineHeight * 5;
+                    this.drawItemDarkRect(rect.x, rect.y + lineHeight * 1, rect.width, lineHeight * 2);
+                    this.drawItemDarkRect(rect.x, rect.y + lineHeight * 3, rect.width, lineHeight * 2);
+                    const expTotal = TextManager.expTotal.format(TextManager.exp);
+                    const expNext = TextManager.expNext.format(TextManager.level);
+                    this.changeTextColor(ColorManager.systemColor());
+                    this.drawText(expTotal, rect.x + padding, rect.y + lineHeight * 1, rect.width - padding * 2);
+                    this.drawText(expNext, rect.x + padding, rect.y + lineHeight * 3, rect.width - padding * 2);
+                    this.resetTextColor();
+                    const expTotalValue = actor.currentExp();
+                    const expNextValue = actor.isMaxLevel() ? maxExp : actor.nextRequiredExp();
+                    this.drawText(expTotalValue, rect.x + padding, rect.y + lineHeight * 1, rect.width - padding * 2, 'right');
+                    this.drawText(expNextValue, rect.x + padding, rect.y + lineHeight * 3, rect.width - padding * 2, 'right');
+
+                    y = rect.y + expHeight;
+                    this.changeTextColor(ColorManager.systemColor());
+                    this.drawItemDarkRect(rect.x, y, rect.width, lineHeight, 2);
+                    this.drawText(TextManager.statusMenuBiography, rect.x, y, rect.width, 'center');
+                    this.resetTextColor();
+                    y += lineHeight;
+                    const bioText = actor.getBiography();
+                    this.drawItemDarkRect(rect.x, y, rect.width, this.innerHeight - y);
+                    this.drawTextEx(bioText, rect.x + padding, y, rect.width - padding * 2);
+                };
+            }
+        } catch (error) {
+            console.error('[KB_MainMenuVisual] ElementStatusCore DrawJS patch failed:',
+                error, error && error.stack);
+        }
+    }
+
+    //==========================================================
+    // Scene_MenuBase main-area cap — reserve bottom space for our
+    // centered hint so windows (notably Scene_Status's gauge row)
+    // don't extend behind it and clip. Caps at min(stock height,
+    // hint-top - mainAreaTop) so we never INCREASE the area, only
+    // tighten it when stock leaves more room than the hint needs.
+    //==========================================================
+    if (USE_CUSTOM_HINT) {
+        const _SceneMenuBase_mainAreaHeight = Scene_MenuBase.prototype.mainAreaHeight;
+        Scene_MenuBase.prototype.mainAreaHeight = function() {
+            const base = _SceneMenuBase_mainAreaHeight.call(this);
+            const hintTop = Graphics.boxHeight - sy(HINT_H);
+            const cap = hintTop - this.mainAreaTop();
+            return Math.min(base, cap);
+        };
+    }
 
     //==========================================================
     // Scene_MenuBase: centered bottom hint on ALL menu scenes

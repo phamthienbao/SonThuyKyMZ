@@ -1,13 +1,13 @@
-# Main Menu (KB_MainMenuVisual v0.6.7 shipped)
+# Main Menu (KB_MainMenuVisual v0.6.15 shipped)
 
 ## Overview
 
 In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker MZ menu with a sumi-e (山水 ink-wash) aesthetic that matches the game's mythological Văn Lang setting. Surfaces the project's custom systems (Bóng Tối Gauge, Ngọc Hồn) and ships with a full Hán Việt command vocabulary.
 
 - **File:** `js/plugins/KB_MainMenuVisual.js` (to be created)
-- **Dependencies:** KB_CoreEngine, KB_Localization, VisuMZ_0_CoreEngine, VisuMZ_1_MainMenuCore
+- **Dependencies:** KB_CoreEngine, KB_Localization, VisuMZ_0_CoreEngine, VisuMZ_1_MainMenuCore, VisuMZ_1_ElementStatusCore
 - **Optional integrations:** KB_BongToiGauge, KB_NgocHonState, VisuMZ_2_QuestSystem, CGMZ_FastTravel
-- **Status:** v0.6.7 shipped (custom centered button hint extended to all Scene_MenuBase subclasses; header right-cluster padding safeguard for cancel button; party column visibility toggled during actor selection)
+- **Status:** v0.6.15 shipped (final ElementStatusCore workaround — runtime patch). v0.6.14's class subtitle now resolves localization keys (`{classStudent}` → "Sinh Viên"). v0.6.13 discovered ElementStatusCore's `Window_StatusData` renders via `drawTextEx`, not `drawText` (and drawTextEx resets font settings). Workaround: bypass drawTextEx and call `contents.drawText()` directly with subtitle styling. DP gauge now visible at Scene_Status bottom edge (clipping caveat documented in v0.6.13). v0.6.15's cleaner fix: at plugin load, patch `VisuMZ.ElementStatusCore.Settings.StatusMenuList[generalIdx].DrawJS` to expand `basicDataHeight` from `6.5*lineHeight` to `7.5*lineHeight`, shifting the actor info block up ~36px so DP fits inside the panel. No longer deferred — now active. v0.6.11 had attempted subclass-level overrides but were shadowed by VisuMZ's own overrides. v0.6.10 capped `Scene_MenuBase.mainAreaHeight` at available space above hint (prevents most scenes' content from overlapping the centered bottom hint). v0.6.9 added class subtitle styling and DP gauge height on Scene_Skill. (`Window_StatusBase.drawActorClass` override uses `SUBTITLE_FONT` + `SUBTITLE_COLOR` so class reads as a small dim subtitle on Scene_Skill/Equip/Status headers; `Scene_Skill.statusWindowHeight` bumped to 5 rows + `Window_SkillStatus.refresh` switched to top-aligned drawing so KB_BongToiGauge's DP row fits without clipping)
 - **Design canvas:** 1280×720 (matches battle UI canvas; uses same `sx()` / `sy()` scaling helpers from KB_CoreEngine)
 
 ## Goals
@@ -46,17 +46,24 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
    (sx 0–280)       (sx 280–880)             (sx 880–1280)
 ```
 
-### Header band and menu button hint (Step 9 — shipped v0.5.0–v0.6.7)
+### Header band and menu button hint (Step 9 — shipped v0.5.0–v0.6.11)
 
-**Status:** Fully implemented with Sprite-based rendering. Custom centered button hint extends to all Scene_MenuBase subclasses in v0.6.7.
+**Status:** Fully implemented with Sprite-based rendering. Custom centered button hint extends to all Scene_MenuBase subclasses in v0.6.7. Scene layout respects hint space in v0.6.10. Scene_Status window rect height capped in v0.6.11 to prevent DP gauge clipping (iteration #1 targeting VisuMZ subclass overrides + absolute pixel drawing).
 
-**Button hint (v0.5.6+, extended v0.6.7):**
+**Button hint (v0.5.6+, extended v0.6.7, scene-aware v0.6.8, layout-safe v0.6.10, Status-refined v0.6.11):**
 - Custom `KB_MenuButtonHint` sprite replaces VisuMZ's right-aligned button-assist bar
-- Displays `[Z] Chọn   [X] Hồi` centered at the bottom of the screen, 56px high
-- **v0.6.7 extension:** Previously only on `Scene_Menu`; now added via `Scene_MenuBase.create` alias so all menu subscenes (Skill / Equip / Status / Item / Options / Quest / Journal / FastTravel / Save) show the same clean centered hint
-- Per-scene rich hints (Page Up/Down, Switch Ally) dropped for visual consistency; if future scenes need extended hints, the `KB_MenuButtonHint` class can be extended to read per-scene context
+- Base display: `[Z] Chọn   [X] Hồi` centered at the bottom of the screen, 56px high
+- **v0.6.7 extension:** Previously only on `Scene_Menu`; now added via `Scene_MenuBase.create` alias so all menu subscenes show the same clean centered hint
+- **v0.6.10 extension:** `Scene_MenuBase.mainAreaHeight` capped at available space above hint so scene content (gauges, windows) never overlaps the hint band
+- **v0.6.11 iteration:** `Scene_Status.statusWindowRect` aliased to cap `rect.y + rect.height` at `Graphics.boxHeight - sy(HINT_H) - sy(20)` (20-px breathing room above the hint). VisuMZ's `Window_Status` uses absolute rects that ignore `mainAreaHeight`, so v0.6.10's cap alone didn't help Scene_Status's DP gauge. Also: `Window_Status.prototype.drawActorClass` override added (separate from existing Window_StatusBase one) so VisuMZ's subclass-level override doesn't shadow it — uses `SUBTITLE_FONT` + `SUBTITLE_COLOR`. **Known caveat:** if VisuMZ's Window_Status draws gauges at absolute pixel positions instead of respecting `innerHeight`, the window-rect cap will clip the gauges instead of moving them up. User to confirm in-game whether the DP gauge is now visible above the hint or just chopped at the new boundary.
+- **v0.6.8 extension:** Scene-aware entries prepended before OK/Cancel:
+  - `Scene_Skill`, `Scene_Equip`, `Scene_Status`, `Scene_ClassChange` (when party ≥ 2): prepends `[Q/W] Đổi Người` / `[Q/W] Switch Ally`
+  - `Scene_Item`, `Scene_Shop`: prepends `[Q/W] Đổi Loại` / `[Q/W] Switch Tab`
+  - All other `Scene_MenuBase` subclasses: plain `[Z] Chọn   [X] Hồi` only
+  - Not yet wired: `Scene_Quest`, `CGMZ_Encyclopedia`, `Scene_FastTravel` (Q/W bindings not yet verified)
+- Implementation: `_paint()` refactored to join an entries array; `_getEntries()` returns `[ optional scene entry, OK, Cancel ]`; `_sceneEntry()` does `instanceof` checks wrapped in `typeof X !== 'undefined'` for safety
 - Params: `Use Custom Bottom Hint` (true), `Hint Height` (56), `Hint OK Key` (Z), `Hint OK Label` (Chọn), `Hint Cancel Key` (X), `Hint Cancel Label` (Hồi)
-- Localization: hint labels route through `KBLocalization.process`, so they respect the active language setting
+- Localization: hint labels route through `KBLocalization.process`, so they respect the active language setting; two new keys added: `menu_hint_switch_actor` (vi `Đổi Người` / en `Switch Ally`), `menu_hint_switch_category` (vi `Đổi Loại` / en `Switch Tab`)
 - **v0.6.6 safeguard:** When `Use Custom Hint` is off but `Header Relocates Button Assist` is on, Scene_Menu still has a fallback path to relocate VisuMZ's default assist bar to the bottom edge (legacy behavior)
 
 ### Header band details (Step 9 — v0.5.0+)
@@ -104,11 +111,13 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
 - Each card displays:
   - Face graphic (top-left of card)
   - Actor name (Hán Việt — uses `$dataActors[id].name` which already routes through KB_Localization)
+  - Class + level as dim subtitle row (18px font, warm gray color, matching personal-scene header treatment)
   - HP gauge + numeric (label: `HP`, English)
   - MP gauge + numeric (label: `MP`, English)
   - **Bóng Tối** gauge (when KB_BongToiGauge is enabled)
   - **Ngọc Hồn** state indicator (when KB_NgocHonState is enabled)
 - Card style: parchment background (reuse `img/system/parchment_*.png` from battle UI for consistency)
+- **v0.6.9 note:** `Window_StatusBase.prototype.drawActorClass` is overridden to use `SUBTITLE_FONT` (18px default) + `SUBTITLE_COLOR` (warm gray), matching the card's subtitle styling. This applies to all actor-class rendering — Scene_Skill / Equip / Status header rows AND full-page Scene_Status. Scene_Skill's status window height bumped to 5 rows (~204px) with top-aligned content drawing (`y=0`) instead of stock vertical-center, accommodating the DP gauge row without truncation.
 
 ## Command list
 
@@ -222,6 +231,24 @@ In `KB_MainMenuVisual.js`, fetch labels via `KB_Localization.getText('menu_cmd_i
 | **Scene_KBJournal** | Hub scene for the Nhật Ký command. Hosts `Window_KBJournalCommand` with 3 entries (Hồi Ký, Yêu Phổ, Nhiệm Vụ); handlers push to CGMZ_Encyclopedia or VisuMZ_2_QuestSystem scenes. Cancel returns to Scene_Menu. | Planned |
 | **Window_KBJournalCommand** | 3-item vertical command window inside Scene_KBJournal. Same parchment + brushstroke selection styling as the main command column. | Planned |
 
+### VisuMZ_1_ElementStatusCore interception (v0.6.13–v0.6.15 workarounds)
+
+**Background:** The Scene_Status **General tab** is rendered by `VisuMZ_1_ElementStatusCore.Window_StatusData`, not MainMenuCore. That window:
+- Uses obfuscated method names (`_0x2e4721(0x158)`, etc.), making reliable method targeting impossible
+- Never calls `drawActorClass` or `drawActorSimpleStatus` — it draws actor info via direct calls inside obfuscated functions
+- Renders class name via `this.drawTextEx(className, ...)` — NOT `drawText` (v0.6.12 misidentified the call path)
+- `drawTextEx` internally resets font settings after the call, so pre-setting `contents.fontSize` doesn't persist to the drawn text
+- Calls `placeGauge` individually for HP/MP/TP, triggering KB_BongToiGauge's chain hook → DP gauge appended below TP
+- ElementStatusCore's General tab's `DrawJS` reserves `basicDataHeight = lineHeight * 6.5` (4 lines for actor info + 3 rows for gauges), fitting HP/MP/TP only. DP as a 4th gauge falls outside this reserved area, sitting at the window's bottom edge and partly clipping behind the hint band.
+
+**Workarounds (in ENABLE_PARTY mode, v0.6.13–v0.6.15):**
+
+1. **Class subtitle via drawTextEx bypass with KB_Localization resolution (v0.6.14)**: Aliased `Window_StatusData.prototype.drawTextEx`. When the text argument equals `this._actor.currentClass().name`, bypass drawTextEx entirely and call `this.contents.drawText(text, x, y, width, lineHeight, 'left')` directly with `SUBTITLE_FONT` + `SUBTITLE_COLOR` pre-set, skipping the escape-sequence processing that drawTextEx does. This ensures subtitle styling persists because we skip the fontSize reset. **NEW in v0.6.14:** The raw class text is piped through `KBLocalization.process(text)` before drawing, so placeholder keys like `{classStudent}` resolve to their Vietnamese labels ("Sinh Viên"). Falls through to raw text if KBLocalization isn't loaded. Works reliably because class names are plain strings without escape sequences.
+
+2. **DP fully visible via runtime DrawJS patch (v0.6.15)**: **ACTIVE.** At plugin load (inside the ENABLE_PARTY branch), if `VisuMZ.ElementStatusCore.Settings.StatusMenuList` exists and contains the General entry, replace its `DrawJS` function with a near-identical reimplementation that sets `basicDataHeight = lineHeight * 7.5` (was 6.5). Everything else preserved verbatim — actor graphic, name/level/class/icons drawing, gauge stack, EXP + Biography panel on the right half. Net effect: the actor info block shifts up ~36 px; the 4-gauge stack now sits cleanly inside the panel. The class-subtitle hook (v0.6.14) still fires inside the patched DrawJS because it still calls `drawTextEx(className, …)`. Wrapped in try/catch with debug-safe `console.error` — silently no-ops if ElementStatusCore isn't installed. **This was the "cleaner future fix" deferred in v0.6.13, now active.**
+
+Both fixes are guarded with `typeof X !== 'undefined'` so a setup without ElementStatusCore still loads cleanly.
+
 ### VisuMZ_1_MainMenuCore integration
 
 Use these MainMenuCore hooks (no core overrides):
@@ -311,10 +338,10 @@ Sequenced for safe rollout. Each step ends in a runnable state.
 6. **Atmospheric panel** — Map tilemap snapshot + PIXI filter chain + caching. Verify on 3 different maps. ✅ Done 2026-05-26 (v0.3)
 7. **Party column** — Actor cards with HP/MP. Verify with single-actor party and full 3-actor party. ✅ Done 2026-05-26 (v0.4)
 8. **Gauge integration** — Hook KB_BongToiGauge + KB_NgocHonState into actor cards. Verify gauges update when values change. ✅ Done 2026-05-26 (v0.4.1–v0.4.4)
-9. **Header band** — Location name, playtime, gold + Lượng unit. ✅ Done 2026-05-26 (v0.5.0)
-10. **Journal hub scene** — Create `Scene_KBJournal` + `Window_KBJournalCommand` (4 commands: Hồi Ký / Yêu Phổ / Nhiệm Vụ / Truyền Kỳ). Wire `menu_cmd_journal` to push this scene. New locale keys `journal_scene_title` and `journal_cmd_lore` added. Window resized to `calcWindowHeight(4)`. Title sprite repositioned to anchor off command window resting Y. ✅ Done 2026-05-26 (v0.6.0 → v0.6.1)
+9. **Header band + menu button hint** — Location name, playtime, gold + Lượng unit. Centered bottom hint (`[Z] Chọn  [X] Hồi`). ✅ Done 2026-05-26 (v0.5.0–v0.6.14). **v0.6.6**: header right padding clears the top-right cancel button dynamically. **v0.6.7**: hint extended from Scene_Menu to all Scene_MenuBase subclasses. **v0.6.8**: scene-aware hint entries — prepends `Q/W: Đổi Người` on Scene_Skill/Equip/Status/ClassChange (party ≥ 2), `Q/W: Đổi Loại` on Scene_Item/Shop. Two new locale keys: `menu_hint_switch_actor`, `menu_hint_switch_category`. **v0.6.10**: `Scene_MenuBase.mainAreaHeight` capped to prevent content overlapping hint. **v0.6.11**: iteration on Scene_Status DP-clipping — `Scene_Status.statusWindowRect` height cap + `Window_Status.drawActorClass` subclass override (attempted but was shadowed by VisuMZ_1_ElementStatusCore). **v0.6.12**: discovered ElementStatusCore's Window_StatusData renders the General tab; drawText interception for class styling. **v0.6.13**: class hook corrected from drawText → drawTextEx (ElementStatusCore calls drawTextEx, which resets fontSize; bypassed by calling drawText directly on contents). DP suppression reverted per user preference; DP now visible at Scene_Status bottom edge with partial clipping caveat. Future cleaner fix (DrawJS patch) deferred pending user opt-in. **v0.6.14**: class subtitle bypass now pipes text through `KBLocalization.process()` to resolve placeholder keys (e.g., `{classStudent}` → "Sinh Viên"), restoring proper Vietnamese labels in Scene_Status General tab.
+10. **Journal hub scene** — Create `Scene_KBJournal` + `Window_KBJournalCommand` (4 commands: **Hành Trình** / **Quái Phổ** / **Nhiệm Vụ** / **Truyền Thuyết**). Wire `menu_cmd_journal` to push this scene. Locale keys `journal_scene_title`, `journal_cmd_story`, `journal_cmd_bestiary`, `journal_cmd_quest`, `journal_cmd_lore`. Window sized to `calcWindowHeight(4)`. Title sprite anchored off command window resting Y. ✅ Done 2026-05-26 (v0.6.0 → v0.6.5).
 11. **Quest authoring** — Wire `journal_cmd_quest` → VisuMZ_2_QuestSystem. Author one sample quest using `{quest_*}` keys to validate the translation flow end-to-end.
-12. **Encyclopedia wiring** — Wire `journal_cmd_story`, `journal_cmd_bestiary`, and `journal_cmd_lore` → CGMZ_Encyclopedia (category pre-select). Add Story Summary, Bestiary, and Lore category configs in CGMZ_Encyclopedia plugin params (3 categories total). Author one sample entry in each category and confirm auto-registered bestiary kill.
+12. **Encyclopedia wiring** — Wire `journal_cmd_story` (Hành Trình), `journal_cmd_bestiary` (Quái Phổ), and `journal_cmd_lore` (Truyền Thuyết) → CGMZ_Encyclopedia (category pre-select). Add Journey, Monster Book, and Legends category configs in CGMZ_Encyclopedia plugin params (3 categories total). Author one sample entry in each category and confirm auto-registered bestiary kill.
 13. **Fast travel wiring** — Wire `menu_cmd_map` to CGMZ_FastTravel scene.
 14. **QA pass** — Test menu open/close across maps, in/out of battle preludes, with party size 1/2/3. Log any regressions to `docs/qc/`.
 

@@ -16,3 +16,5 @@ journal_cmd_bestiary;Monster Book
 journal_cmd_quest;Quest Logs
 journal_cmd_lore;Legends
 journal_scene_title;Journal
+menu_hint_switch_actor;Switch Ally
+menu_hint_switch_category;Switch Tab

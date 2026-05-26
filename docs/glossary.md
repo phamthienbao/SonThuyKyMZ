@@ -100,7 +100,9 @@ All in-game UI text uses **Hán Việt** (Sino-Vietnamese) vocabulary for litera
 | Quit | Rời Đi | plain Vietnamese; "Hồi Gia" 回家 alt pending pick | `menu_cmd_quit` |
 | Gold unit | Lượng | 兩 (taels) | `menu_unit_gold` |
 | Playtime | Thời Gian | 時間 | `menu_label_playtime` |
-| Journal (scene title) | Nhật Ký | 日記 (scene header text, Step 10) | `journal_scene_title` |
+| Switch Ally | Đổi Người | 換人 (scene-aware hint, v0.6.8) | `menu_hint_switch_actor` |
+| Switch Tab | Đổi Loại | 換類 (scene-aware hint, v0.6.8) | `menu_hint_switch_category` |
+| Journal (scene title) | Nhật Ký | 日記 (scene header text, Step 11) | `journal_scene_title` |
 | HP / MP / TP | (untranslated, user pref) | — | — |
 
 Reference: `docs/spec/main-menu.md` is the authoritative source for menu terminology decisions.
