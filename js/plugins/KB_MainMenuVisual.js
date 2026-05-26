@@ -1,9 +1,9 @@
 //=============================================================================
-// KB_MainMenuVisual.js  v0.1
+// KB_MainMenuVisual.js  v0.5.6
 //=============================================================================
 /*:
  * @target MZ
- * @plugindesc [v0.1] Sumi-e ink-wash main menu (KB Edition) — SKELETON STAGE.
+ * @plugindesc [v0.5.6] Sumi-e ink-wash main menu — custom centered bottom hint.
  * @author KB
  *
  * @help
@@ -136,6 +136,90 @@
  * @type string
  * @default #b8a888
  *
+ * @param --- Header Band (Step 9) ---
+ * @default
+ *
+ * @param Header Height
+ * @desc Header band height at 720 design height. Should match Command Top Offset.
+ * @type number
+ * @default 64
+ *
+ * @param Header Title
+ * @desc Title shown on the left. Leave blank to use $dataSystem.gameTitle.
+ * @type string
+ * @default
+ *
+ * @param Header Title Font Size
+ * @desc Pixel font size for the header title.
+ * @type number
+ * @default 26
+ *
+ * @param Header Info Font Size
+ * @desc Pixel font size for the right-side info (location, playtime, gold).
+ * @type number
+ * @default 18
+ *
+ * @param Header Title Color
+ * @desc CSS color for the header title. Parchment cream by default.
+ * @type string
+ * @default #e8dcc4
+ *
+ * @param Header Info Color
+ * @desc CSS color for the right-side info text. Dim warm gray by default.
+ * @type string
+ * @default #b8a888
+ *
+ * @param Header Background Alpha
+ * @desc Opacity of the header ink-wash band (0 = transparent, 1 = solid black).
+ * @type number
+ * @decimals 2
+ * @default 0.45
+ *
+ * @param Header Separator Color
+ * @desc CSS color for the brushstroke hairline below the header.
+ * @type string
+ * @default #8a7866
+ *
+ * @param Header Hides VisuMZ Bars
+ * @desc When the header is on, hide VisuMZ's bottom Playtime/Variable/Gold bars (header replaces them).
+ * @type boolean
+ * @default true
+ *
+ * @param Header Relocates Button Assist
+ * @desc When the header is on, move VisuMZ's Button Assist window to the bottom so it stops overlapping the header.
+ * @type boolean
+ * @default true
+ *
+ * @param Use Custom Bottom Hint
+ * @desc Replace VisuMZ's right-aligned Button Assist with a custom centered bottom hint bar on Scene_Menu only.
+ * @type boolean
+ * @default true
+ *
+ * @param Hint Height
+ * @desc Hint bar height at 720 design height.
+ * @type number
+ * @default 56
+ *
+ * @param Hint OK Key
+ * @desc Key indicator drawn before the OK label (e.g. "Z", or any short string).
+ * @type string
+ * @default Z
+ *
+ * @param Hint OK Label
+ * @desc Action label for the OK key.
+ * @type string
+ * @default Chọn
+ *
+ * @param Hint Cancel Key
+ * @desc Key indicator drawn before the Cancel label.
+ * @type string
+ * @default X
+ *
+ * @param Hint Cancel Label
+ * @desc Action label for the Cancel key.
+ * @type string
+ * @default Hồi
+ *
  * @param --- Atmosphere Panel (Step 6) ---
  * @default
  *
@@ -226,7 +310,11 @@ Imported.KB_MainMenuVisual = true;
     const P    = PluginManager.parameters("KB_MainMenuVisual");
     const num  = (k, d) => Number(P[k] ?? d);
     const str  = (k, d) => String(P[k] ?? d);
-    const bool = (k)    => KB.Utils.isTrue(P[k]);
+    // Default arg lets new params behave as documented even when the user
+    // hasn't re-opened Plugin Manager (which is what regenerates plugins.js
+    // with new param keys). Without it, every newly added param silently
+    // becomes false on existing installs.
+    const bool = (k, d = false) => KB.Utils.isTrue(P[k] ?? String(d));
 
     const RES_W = num('Resolution Width',  1280);
     const RES_H = num('Resolution Height', 720);
@@ -246,6 +334,23 @@ Imported.KB_MainMenuVisual = true;
     const SEL_COLOR         = str('Selection Color',     '#a52a2a');
     const SUBTITLE_FONT     = num('Class Subtitle Font Size',     18);
     const SUBTITLE_COLOR    = str('Class Subtitle Color',  '#b8a888');
+
+    const HEADER_H          = num('Header Height',                64);
+    const HEADER_TITLE_RAW  = str('Header Title',                  '');
+    const HEADER_TITLE_FONT = num('Header Title Font Size',        26);
+    const HEADER_INFO_FONT  = num('Header Info Font Size',         18);
+    const HEADER_TITLE_COL  = str('Header Title Color',     '#e8dcc4');
+    const HEADER_INFO_COL   = str('Header Info Color',      '#b8a888');
+    const HEADER_BG_ALPHA   = num('Header Background Alpha',     0.45);
+    const HEADER_SEP_COLOR  = str('Header Separator Color', '#8a7866');
+    const HEADER_HIDE_BARS  = bool('Header Hides VisuMZ Bars',      true);
+    const HEADER_MOVE_ASSIST = bool('Header Relocates Button Assist', true);
+    const USE_CUSTOM_HINT   = bool('Use Custom Bottom Hint',        true);
+    const HINT_H            = num('Hint Height',                      56);
+    const HINT_OK_KEY       = str('Hint OK Key',                    'Z');
+    const HINT_OK_LABEL     = str('Hint OK Label',                'Chọn');
+    const HINT_CANCEL_KEY   = str('Hint Cancel Key',                'X');
+    const HINT_CANCEL_LABEL = str('Hint Cancel Label',            'Hồi');
 
     const ATMOS_X           = num('Atmosphere Panel X',         280);
     const ATMOS_W           = num('Atmosphere Panel Width',     600);
@@ -281,14 +386,25 @@ Imported.KB_MainMenuVisual = true;
         // Reposition command window to vertical left column.
         // Patched as a method aliases (not a fresh class) so VisuMZ's
         // command-list logic (custom commands, show/enable JS) keeps working.
+        // Leave room at the bottom for whatever hint bar we end up using
+        // (custom centered hint OR relocated VisuMZ button assist), so the
+        // command/status column doesn't render behind it.
+        const _kbBottomReserve = function(scene) {
+            if (ENABLE_HEADER && USE_CUSTOM_HINT) {
+                return sy(HINT_H);
+            }
+            if (ENABLE_HEADER && HEADER_MOVE_ASSIST
+                && scene && scene._buttonAssistWindow) {
+                return scene._buttonAssistWindow.height;
+            }
+            return 0;
+        };
+
         const _SceneMenu_commandWindowRect = Scene_Menu.prototype.commandWindowRect;
         Scene_Menu.prototype.commandWindowRect = function() {
-            return new Rectangle(
-                0,
-                sy(CMD_TOP_OFFSET),
-                sx(CMD_COL_W),
-                Graphics.boxHeight - sy(CMD_TOP_OFFSET)
-            );
+            const top = sy(CMD_TOP_OFFSET);
+            const h = Graphics.boxHeight - top - _kbBottomReserve(this);
+            return new Rectangle(0, top, sx(CMD_COL_W), h);
         };
 
         // Shift VisuMZ's status window to the right of our command column.
@@ -296,11 +412,11 @@ Imported.KB_MainMenuVisual = true;
         // get it out of the way so the column doesn't overlap.
         const _SceneMenu_statusWindowRect = Scene_Menu.prototype.statusWindowRect;
         Scene_Menu.prototype.statusWindowRect = function() {
+            const top = sy(CMD_TOP_OFFSET);
+            const h = Graphics.boxHeight - top - _kbBottomReserve(this);
             return new Rectangle(
-                sx(CMD_COL_W),
-                sy(CMD_TOP_OFFSET),
-                Graphics.boxWidth  - sx(CMD_COL_W),
-                Graphics.boxHeight - sy(CMD_TOP_OFFSET)
+                sx(CMD_COL_W), top,
+                Graphics.boxWidth - sx(CMD_COL_W), h
             );
         };
 
@@ -384,12 +500,153 @@ Imported.KB_MainMenuVisual = true;
     //==========================================================
     // KB_MenuHeader — top band (step 9)
     //==========================================================
+    // Single full-width Bitmap so background, hairline, and text all live on
+    // one texture (no nested Sprites). Repaints when $gameSystem.playtime()
+    // ticks so the clock advances smoothly while the menu is open.
     class KB_MenuHeader extends Sprite {
         constructor() {
             super();
-            this.bitmap = new Bitmap(Graphics.boxWidth, sy(64));
+            this.bitmap = new Bitmap(Graphics.boxWidth, sy(HEADER_H));
             this.x = 0;
             this.y = 0;
+            this._lastPlaytime = -1;
+            this._refreshScheduled = true;
+        }
+
+        update() {
+            super.update();
+            if (this._refreshScheduled) {
+                this._refreshScheduled = false;
+                this._lastPlaytime = $gameSystem.playtime();
+                this.refresh();
+                return;
+            }
+            const pt = $gameSystem.playtime();
+            if (pt !== this._lastPlaytime) {
+                this._lastPlaytime = pt;
+                this.refresh();
+            }
+        }
+
+        refresh() {
+            if (!this.bitmap) return;
+            try {
+                this._paint();
+            } catch (error) {
+                console.error('[KB_MainMenuVisual] KB_MenuHeader.refresh failed:',
+                    error, error && error.stack);
+            }
+        }
+
+        _paint() {
+            const bmp = this.bitmap;
+            const w = bmp.width;
+            const h = bmp.height;
+            bmp.clear();
+
+            // Ink-wash background: darker top, fading downward
+            const ctx = bmp.context;
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, `rgba(0,0,0,${HEADER_BG_ALPHA})`);
+                grad.addColorStop(1, `rgba(0,0,0,${HEADER_BG_ALPHA * 0.55})`);
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+                bmp._baseTexture.update();
+            }
+
+            // Brushstroke hairline at the bottom edge
+            bmp.fillRect(sx(24), h - 2, w - sx(48), 1, HEADER_SEP_COLOR);
+
+            const padX = sx(24);
+            const titleY = Math.floor((h - HEADER_TITLE_FONT) / 2) - 2;
+            const infoY  = Math.floor((h - HEADER_INFO_FONT)  / 2);
+
+            bmp.fontFace = $gameSystem.mainFontFace();
+
+            // Title (left)
+            bmp.fontSize = HEADER_TITLE_FONT;
+            bmp.textColor = HEADER_TITLE_COL;
+            const titleSrc = HEADER_TITLE_RAW && HEADER_TITLE_RAW.trim()
+                ? HEADER_TITLE_RAW
+                : (($dataSystem && $dataSystem.gameTitle) || '');
+            const titleStr = this._localize(String(titleSrc));
+            const titleMaxW = Math.floor(w * 0.42);
+            const titleW = Math.min(bmp.measureTextWidth(titleStr), titleMaxW);
+            if (titleStr) {
+                bmp.drawText(titleStr, padX, titleY,
+                    titleW || titleMaxW, HEADER_TITLE_FONT + 4, 'left');
+            }
+
+            // Right cluster: gold | playtime | location, right-aligned
+            bmp.fontSize = HEADER_INFO_FONT;
+            bmp.textColor = HEADER_INFO_COL;
+            const gap = sx(20);
+            let cursor = w - padX;
+
+            const goldUnit = this._t('menu_unit_gold',
+                TextManager.currencyUnit || 'Gold');
+            const goldStr = String($gameParty.gold()) + ' ' + goldUnit;
+            cursor = this._drawRight(bmp, goldStr, cursor, infoY) - gap;
+
+            const ptLabel = this._t('menu_label_playtime', 'Playtime');
+            const ptStr   = ptLabel + ' ' + $gameSystem.playtimeText();
+            cursor = this._drawRight(bmp, ptStr, cursor, infoY) - gap;
+
+            const locSrc = ($gameMap && $gameMap.displayName
+                && $gameMap.displayName()) || '';
+            const locStr = this._localize(String(locSrc).trim());
+            if (locStr) {
+                const leftLimit = padX + (titleStr ? titleW + sx(20) : 0);
+                const maxLocW = Math.max(0, cursor - leftLimit);
+                if (maxLocW > 0) {
+                    const locW = Math.min(bmp.measureTextWidth(locStr), maxLocW);
+                    bmp.drawText(locStr, cursor - locW, infoY,
+                        locW, HEADER_INFO_FONT + 4, 'left');
+                }
+            }
+        }
+
+        _drawRight(bmp, text, rightEdge, y) {
+            const tw = bmp.measureTextWidth(text);
+            bmp.drawText(text, rightEdge - tw, y, tw, HEADER_INFO_FONT + 4, 'left');
+            return rightEdge - tw;
+        }
+
+        _t(key, fallback) {
+            if (typeof KB_Localization !== 'undefined' && KB_Localization.getText) {
+                return KB_Localization.getText(key) || fallback;
+            }
+            if (typeof KBLocalization !== 'undefined' && KBLocalization.getText) {
+                return KBLocalization.getText(key) || fallback;
+            }
+            return fallback;
+        }
+
+        // KB_Localization resolves {key} substitutions on demand for arbitrary
+        // strings (map display names may contain them).
+        _localize(text) {
+            if (!text) return text;
+            if (typeof KBLocalization !== 'undefined' && KBLocalization.process) {
+                return KBLocalization.process(text);
+            }
+            return text;
+        }
+    }
+
+    //==========================================================
+    // KB_MenuButtonHint — centered bottom key-hint bar (step 9 polish)
+    //==========================================================
+    // VisuMZ's Window_ButtonAssist lays its segments out at fixed pixel
+    // offsets calculated from full screen width — resize/shift hacks crop
+    // or off-center it. Easier to draw our own centered hint and hide
+    // VisuMZ's bar on Scene_Menu.
+    class KB_MenuButtonHint extends Sprite {
+        constructor() {
+            super();
+            this.bitmap = new Bitmap(Graphics.boxWidth, sy(HINT_H));
+            this.x = 0;
+            this.y = Graphics.boxHeight - sy(HINT_H);
             this._refreshScheduled = true;
         }
         update() {
@@ -400,9 +657,60 @@ Imported.KB_MainMenuVisual = true;
             }
         }
         refresh() {
-            // step 9: paint title + location + playtime + gold band
-            this.bitmap.clear();
-            dlog('KB_MenuHeader.refresh — stub');
+            if (!this.bitmap) return;
+            try {
+                this._paint();
+            } catch (error) {
+                console.error('[KB_MainMenuVisual] KB_MenuButtonHint.refresh failed:',
+                    error, error && error.stack);
+            }
+        }
+        _paint() {
+            const bmp = this.bitmap;
+            const w = bmp.width;
+            const h = bmp.height;
+            bmp.clear();
+
+            // Ink-wash bg matching the header (bottom darker than top so the
+            // bar reads as a footer rather than a separate window).
+            const ctx = bmp.context;
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, `rgba(0,0,0,${HEADER_BG_ALPHA * 0.55})`);
+                grad.addColorStop(1, `rgba(0,0,0,${HEADER_BG_ALPHA})`);
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+                bmp._baseTexture.update();
+            }
+
+            // Brushstroke hairline along the top edge (mirrors header's bottom)
+            bmp.fillRect(sx(24), 1, w - sx(48), 1, HEADER_SEP_COLOR);
+
+            bmp.fontFace = $gameSystem.mainFontFace();
+            bmp.fontSize = HEADER_INFO_FONT;
+            bmp.textColor = HEADER_INFO_COL;
+
+            const okKey     = this._localize(HINT_OK_KEY);
+            const okLabel   = this._localize(HINT_OK_LABEL);
+            const cancelKey = this._localize(HINT_CANCEL_KEY);
+            const cancelLab = this._localize(HINT_CANCEL_LABEL);
+
+            const ok     = `[${okKey}] ${okLabel}`;
+            const cancel = `[${cancelKey}] ${cancelLab}`;
+            const sep    = '     ';
+            const line   = ok + sep + cancel;
+
+            const tw = bmp.measureTextWidth(line);
+            const tx = Math.max(0, Math.floor((w - tw) / 2));
+            const ty = Math.floor((h - HEADER_INFO_FONT) / 2);
+            bmp.drawText(line, tx, ty, tw + 4, HEADER_INFO_FONT + 4, 'left');
+        }
+        _localize(text) {
+            if (!text) return text;
+            if (typeof KBLocalization !== 'undefined' && KBLocalization.process) {
+                return KBLocalization.process(text);
+            }
+            return text;
         }
     }
 
@@ -412,9 +720,16 @@ Imported.KB_MainMenuVisual = true;
     class KB_MenuAtmosphereLayer extends Sprite {
         constructor() {
             super();
-            this.x = sx(ATMOS_X);
+            // When party or command column is on, span the full screen width
+            // (under the command column too) so the entire menu has one
+            // unified ink-wash backdrop. Otherwise honor the configured panel
+            // X/W params for a more focused "viewport" frame.
+            const spanFull = ENABLE_PARTY || ENABLE_CMD_STYLE;
+            this.x = spanFull ? 0 : sx(ATMOS_X);
             this.y = sy(ATMOS_TOP);
-            this._panelW = sx(ATMOS_W);
+            this._panelW = spanFull
+                ? Graphics.boxWidth
+                : sx(ATMOS_W);
             this._panelH = Graphics.boxHeight - sy(ATMOS_TOP) - sy(ATMOS_BOTTOM);
             this._built = false;
         }
@@ -631,12 +946,20 @@ Imported.KB_MainMenuVisual = true;
                     ImageManager.loadFace(m.faceName());
                 }
             }
+            // Vertically center the stack within the available column height
+            // so a 1- or 2-actor party doesn't leave a big empty gap below.
+            const cardH = sy(CARD_H);
+            const gap   = sy(CARD_GAP);
+            const stackH = members.length * cardH
+                + Math.max(0, members.length - 1) * gap;
+            const colH = Graphics.boxHeight - this.y - sy(ATMOS_BOTTOM);
+            const startY = Math.max(0, Math.floor((colH - stackH) / 2));
             for (let i = 0; i < members.length; i++) {
                 const rect = new Rectangle(
                     0,
-                    (sy(CARD_H) + sy(CARD_GAP)) * i,
+                    startY + (cardH + gap) * i,
                     sx(CARD_W),
-                    sy(CARD_H)
+                    cardH
                 );
                 const card = new KB_ActorCardMenu(members[i], rect);
                 this.addChild(card);
@@ -727,10 +1050,40 @@ Imported.KB_MainMenuVisual = true;
             if (ENABLE_HEADER) {
                 this._kbHeader = new KB_MenuHeader();
                 this.addChild(this._kbHeader);
+                // The header band now carries playtime + gold + location, so
+                // VisuMZ's bottom Playtime/Variable/Gold windows duplicate it.
+                if (HEADER_HIDE_BARS) {
+                    for (const key of ['_playtimeWindow', '_variableWindow', '_goldWindow']) {
+                        const w = this[key];
+                        if (w) { w.hide(); w.deactivate(); }
+                    }
+                }
+                if (USE_CUSTOM_HINT) {
+                    // Drop VisuMZ's button assist entirely; our hint replaces
+                    // it on this scene only (other scenes keep VisuMZ's bar).
+                    if (this._buttonAssistWindow) {
+                        this._buttonAssistWindow.visible = false;
+                        this._buttonAssistWindow.deactivate();
+                    }
+                    this._kbHint = new KB_MenuButtonHint();
+                    this.addChild(this._kbHint);
+                } else if (HEADER_MOVE_ASSIST && this._buttonAssistWindow) {
+                    // Fallback: keep VisuMZ's bar but drop it to the bottom
+                    // edge so it stops overlapping the header band.
+                    const baw = this._buttonAssistWindow;
+                    baw.y = Graphics.boxHeight - baw.height;
+                }
             }
             if (ENABLE_ATMOSPHERE) {
                 this._kbAtmosphere = new KB_MenuAtmosphereLayer();
-                this.addChild(this._kbAtmosphere);
+                // Insert BEFORE the window layer so the ink-wash sits behind
+                // the command/status windows, not on top of them. Adding via
+                // addChild() (the previous default) puts the panel above the
+                // window layer and the command icons disappear.
+                const wlIdx = this._windowLayer
+                    ? this.getChildIndex(this._windowLayer)
+                    : this.children.length;
+                this.addChildAt(this._kbAtmosphere, wlIdx);
                 this._kbAtmosphere.renderAtmosphere();
             }
             if (ENABLE_PARTY) {
@@ -752,9 +1105,26 @@ Imported.KB_MainMenuVisual = true;
         if (ENABLE_PARTY && HIDE_STOCK_STATUS && this._statusWindow) {
             this._statusWindow.hide();
             this._statusWindow.deactivate();
+            // Some VisuMZ builds keep the frame sprite around even when
+            // visible=false. setBackgroundType(2) drops the windowskin frame
+            // entirely so no ghost rectangle leaks through.
+            this._statusWindow.setBackgroundType(2);
             dlog('Stock status window hidden.');
         }
     };
+
+    // Make the command column transparent when our ink-wash style is on, so
+    // its windowskin frame doesn't compete with the atmosphere panel that
+    // now spans full-width beneath it.
+    if (ENABLE_CMD_STYLE) {
+        const _SceneMenu_createCommandWindow_kbStyle = Scene_Menu.prototype.createCommandWindow;
+        Scene_Menu.prototype.createCommandWindow = function() {
+            _SceneMenu_createCommandWindow_kbStyle.call(this);
+            if (this._commandWindow) {
+                this._commandWindow.setBackgroundType(2);
+            }
+        };
+    }
 
     //==========================================================
     // Scene_Menu command handlers — journal + map symbol wiring

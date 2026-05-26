@@ -10,6 +10,7 @@ menu_cmd_options;Thiết Đặt
 menu_cmd_save;Save
 menu_cmd_quit;Rời Đi
 menu_unit_gold;Lượng
+menu_label_playtime;Thời Gian
 journal_cmd_story;Hồi Ký
 journal_cmd_bestiary;Yêu Phổ
 journal_cmd_quest;Nhiệm Vụ

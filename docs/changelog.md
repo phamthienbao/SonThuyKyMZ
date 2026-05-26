@@ -2,6 +2,76 @@
 
 Append-only. Newest entries on top. Format: `YYYY-MM-DD — short summary`.
 
+## 2026-05-26 — KB_MainMenuVisual v0.5.6: custom centered bottom hint replaces VisuMZ button assist
+
+User asked for `:Select :Back` to be centered at the bottom. VisuMZ's `Window_ButtonAssist` lays out its segments at fixed pixel offsets calculated from full screen width, so any resize/shift hack either crops or stays right-anchored. Cleaner to drop a custom hint sprite on Scene_Menu only.
+
+- **New `KB_MenuButtonHint` sprite** — full-width 56-px bottom band, gradient ink-wash bg (mirrors the header but with darker bottom edge), brushstroke hairline at the top. Draws `[Z] Chọn     [X] Hồi` centered horizontally. Localization-aware (each label runs through `KBLocalization.process`).
+- **VisuMZ's Button Assist hidden on Scene_Menu** when `Use Custom Bottom Hint` is on (`visible = false` + `deactivate()`). Other scenes still use VisuMZ's default bar — this only swaps in our hint on the menu.
+- **Six new plugin params** with sticky defaults: `Use Custom Bottom Hint` (true), `Hint Height` (56), `Hint OK Key` (Z), `Hint OK Label` (Chọn), `Hint Cancel Key` (X), `Hint Cancel Label` (Hồi). All inherit defaults via the `bool/num/str` helpers, so the fix activates on reload without a Plugin Manager save.
+- **`_kbBottomReserve` updated** to subtract `HINT_H` when the custom hint is on (instead of VisuMZ assist height), so command/status windows still leave the right amount of room.
+- Fallback path kept: `Use Custom Bottom Hint=false` → previous behaviour (relocate VisuMZ assist to bottom edge).
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.5: atmosphere panel z-order + revert assist resize
+
+v0.5.4 broke two things:
+1. **Command column went invisible** — the atmosphere panel, added via `addChild()` after `super.create()`, became the highest-z sibling of the scene root and rendered ON TOP of the window layer. Command icons + text were buried under the ink-wash.
+2. **Button Assist text got cropped** — `move()`ing the window to a narrower width doesn't reflow VisuMZ's internal segment layout. The icons + text are drawn at fixed pixel offsets calculated for the original 1280-wide bar, so narrowing just clips them.
+
+- **Atmosphere panel now inserted via `addChildAt(panel, indexOf(_windowLayer))`** so it sits behind the window layer instead of on top. Command/status windows now render above the ink-wash. The unified backdrop intent from v0.5.4 stays intact.
+- **Button Assist resize reverted.** The window keeps its original full width; only `y` is adjusted to the bottom edge. Labels render correctly (no crop). Centering is deferred — it needs an override of VisuMZ's segment-layout method, not a window-resize hack.
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.4: unified ink-wash backdrop + framed windows go transparent
+
+Two issues reported via screenshots:
+1. Right border of the command column looked truncated where it met the atmosphere panel (a visible windowskin seam).
+2. The bottom of the menu had a ghost "empty rectangle" above the Button Assist bar (a residual VisuMZ window frame), and `:Select :Back` sat marooned on the far right of a full-width assist bar.
+
+- **Atmosphere panel now spans the full screen width** when `Enable Party Column` OR `Enable Command Style` is on — `x=0`, `width=Graphics.boxWidth`. The whole menu shares one ink-wash backdrop; command column, cards, and middle viewport all sit on top.
+- **Command window goes transparent** (`setBackgroundType(2)`) when `Enable Command Style` is on. No more windowskin frame fighting with the atmosphere panel; only icons + text + brushstroke underline render (contentsBack is unaffected by the type change).
+- **Status window: `setBackgroundType(2)` in addition to `hide()`** — defensive against VisuMZ builds where `.hide()` doesn't fully suppress the frame sprite. Kills the empty-rectangle ghost.
+- **Button Assist narrowed and centered.** Was a full-width bar with two items pinned right; now `move()`s to a 560-design-px wide window centered horizontally at the bottom edge. `:Select :Back` now sit visually centered.
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.3: layout polish — bleed, centering, bottom seam
+
+Reported via in-game screenshot: with header on, party of 1, the right side of the menu still showed colourful blurred map under the single card, and the bottom of the screen had visible window-frame seams between the command column and the relocated Button Assist.
+
+- **Atmosphere panel extends behind party column.** When `Enable Party Column` is on, `KB_MenuAtmosphereLayer` now stretches its width to `Graphics.boxWidth - panelX` instead of using `ATMOS_W`. The ink-wash treatment now spans everything between the command column and the right edge; cards render on top of it. Eliminates the colourful bleed-through.
+- **Party cards now vertically centered.** `KB_MenuPartyColumn.refresh` computes a `startY` offset so a 1- or 2-actor party stack is centered in the available column height rather than top-anchored — no more big gap below the lone card during early-prologue play.
+- **Command + status windows leave room for the Button Assist.** Added `_kbBottomReserve()` helper — when `Header Relocates Button Assist` is on, both `commandWindowRect` and `statusWindowRect` subtract the button-assist height from their bottom edge. Removes the double-border seam where the command column used to extend past the relocated assist bar.
+- All three changes are no-ops when the related layer (`Enable Party Column` / `Header Relocates Button Assist`) is off.
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.2: bool param helper now respects defaults
+
+- **Bug:** v0.5.1 fix shipped but had no effect — bars/button assist still overlapped on user playtest. Root cause: RPG Maker MZ only writes plugin params into `plugins.js` when the user re-opens Plugin Manager and saves; until then `PluginManager.parameters('KB_MainMenuVisual')` returns the old param dict and the two new keys (`Header Hides VisuMZ Bars`, `Header Relocates Button Assist`) come back `undefined`. The local `bool(k)` helper had no default arg, so undefined → `String(undefined) === "true"` → `false`, and the fix branch was skipped.
+- **Fix:** `bool(k, d=false)` now accepts a default that takes effect when the key is missing from `plugins.js`. The two new header params pass `true` as the default. The fix now activates immediately, without requiring the user to refresh Plugin Manager.
+- This is a general lesson — any future new boolean param should pass its documented default to `bool()` so existing installs pick it up on first reload.
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.1: header no longer collides with VisuMZ bars
+
+- **Bug** (reported via in-game screenshot): with `Enable Header` on, the header text overlapped VisuMZ's Button Assist window (the `:Select` / `:Back` keyboard-hint bar) at the top, garbling the right-side cluster. The bottom of the screen still showed VisuMZ's `Time` and `Vàng` bars from MainMenuCore — now redundant with the header.
+- **Fix:** when `Enable Header` is on, Scene_Menu.create now:
+  1. Hides VisuMZ's `_playtimeWindow`, `_variableWindow`, and `_goldWindow` (the bottom Time/Variable/Gold bars).
+  2. Moves VisuMZ's `_buttonAssistWindow` to `Graphics.boxHeight - height` (bottom of screen) so it stops overlapping the header.
+- Both behaviors are gated by new plugin params (defaults `true`):
+  - `Header Hides VisuMZ Bars` — toggles bottom bar suppression.
+  - `Header Relocates Button Assist` — toggles button assist relocation.
+- No code path is reached unless `Enable Header` is also on; the plugin remains a no-op for installs that haven't enabled the header.
+
+## 2026-05-26 — KB_MainMenuVisual v0.5.0: header band (Step 9)
+
+- **`KB_MenuHeader.refresh`** implemented (replaces the v0.1 stub):
+  - Full-width band, height configurable via plugin param `Header Height` (default 64 — matches `Command Top Offset` and `Atmosphere Top Margin`).
+  - **Left:** game title from `$dataSystem.gameTitle` (override with the `Header Title` param if a chapter title is preferred). Localization-aware (`KBLocalization.process`) so `{key}` placeholders resolve.
+  - **Right cluster** (right-aligned, right-to-left): gold + `Lượng` · Thời Gian hh:mm:ss · location (`$gameMap.displayName()`).
+  - **Ink-wash background:** vertical gradient (`HEADER_BG_ALPHA` → `0.55 * HEADER_BG_ALPHA`); brushstroke hairline divider at the bottom edge.
+- **Live clock:** repaints whenever `$gameSystem.playtime()` ticks (delta check each frame; cheap), so the seconds advance in real time while the menu is open.
+- **New plugin params:** Header Height (64), Header Title (`""`), Header Title Font Size (26), Header Info Font Size (18), Header Title Color (`#e8dcc4`), Header Info Color (`#b8a888`), Header Background Alpha (0.45), Header Separator Color (`#8a7866`).
+- **New localization keys:** `menu_label_playtime` → `Thời Gian` (vi) / `Playtime` (en) in `locales/vi/Menu.csv` + `locales/en/Menu.csv`.
+- **Try/catch** around `_paint` with full error + stack trace via `console.error` (debug-safe — only fires when paint actually throws; never silenced).
+- **Pending user:** flip `Enable Header` → true in Plugin Manager. The other layer params (atmosphere, party column, command style) are independent — header can ship alone or alongside them.
+- **Next:** Step 10 — wire `menu_cmd_journal` handler (flip `Wire Journal Handler` param) and verify Scene_KBJournal pushes the 3-option hub.
+
 ## 2026-05-26 — KB_MainMenuVisual v0.4.4: class name as visual subtitle, not 2nd name
 
 - **UX feedback:** Class name was rendering at the same size/weight as character name, reading like a two-line name field.

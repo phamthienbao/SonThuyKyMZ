@@ -98,6 +98,7 @@ All in-game UI text uses **Hán Việt** (Sino-Vietnamese) vocabulary for litera
 | Save | Save | (untranslated, user pref) | `menu_cmd_save` |
 | Quit | Rời Đi | plain Vietnamese; "Hồi Gia" 回家 alt pending pick | `menu_cmd_quit` |
 | Gold unit | Lượng | 兩 (taels) | `menu_unit_gold` |
+| Playtime | Thời Gian | 時間 | `menu_label_playtime` |
 | HP / MP / TP | (untranslated, user pref) | — | — |
 
 Reference: `docs/spec/main-menu.md` is the authoritative source for menu terminology decisions.

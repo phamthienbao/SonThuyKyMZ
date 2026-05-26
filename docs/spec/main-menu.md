@@ -1,4 +1,4 @@
-# Main Menu (KB_MainMenuVisual v1.0 — planned)
+# Main Menu (KB_MainMenuVisual v0.5.0 shipped, v1.0 in progress)
 
 ## Overview
 
@@ -46,12 +46,26 @@ In-game pause menu redesign for Sơn Thuỷ Ký. Replaces the default RPG Maker 
    (sx 0–280)       (sx 280–880)             (sx 880–1280)
 ```
 
-### Header band
+### Header band (Step 9 — shipped v0.5.0)
 
-- Height: `sy(64)`
-- Left: game title + current location name (from `$gameMap.displayName()` or per-map override via localization)
-- Right: playtime (`$gameSystem.playtimeText()`) + gold with `Lượng` unit
-- Style: thin ink-painted divider line below, no solid background — paper texture shows through
+**Status:** Fully implemented with Sprite-based rendering.
+
+- Height: 64px
+- Left: game title (from `$dataSystem.gameTitle`, processed through KB_Localization) + current location name (from `$gameMap.displayName()`)
+- Right: right-aligned cluster: gold amount + "Lượng" unit label, playtime (hh:mm:ss format), map location
+- Rendering: Full-width Sprite (KB_MenuHeader) paints dynamically each frame with playtime delta check to minimize redraws
+- Style: ink-wash parchment background (alpha 0.45), cinnabar/taupe ink separator divider below, no solid box — paper texture shows through
+- Params (8 total):
+  - Header Height: 64
+  - Header Title Font Size: 26
+  - Header Title Color: #e8dcc4 (cream)
+  - Header Info Font Size: 18
+  - Header Info Color: #b8a888 (taupe)
+  - Header Background Alpha: 0.45
+  - Header Separator Color: #8a7866 (dark brown ink)
+  - Header Title (blank = auto-load from $dataSystem.gameTitle)
+- Error handling: try/catch around `_paint()` with `console.error()` + full stack trace logging
+- Localization integration: `menu_label_playtime` key added to `locales/*/Menu.csv`
 
 ### Command column (left)
 
@@ -192,19 +206,19 @@ Register `Menu` in KB_Localization plugin params (`Data Files`).
 
 In `KB_MainMenuVisual.js`, fetch labels via `KB_Localization.getText('menu_cmd_item')` etc. when building Window_MenuCommand.
 
-## Architecture (planned)
+## Architecture
 
 ### Core classes
 
-| Class | Purpose |
-|-------|---------|
-| **KB_MenuHeader** | Top band: title + location + playtime + gold. Refreshes on open. |
-| **KB_MenuAtmosphereLayer** | Renders desaturated ink-wash of current map tilemap into a cached `Bitmap`; PIXI filter chain (Desaturate → Grain → Vignette). Cache key = `$gameMap.mapId()`. |
-| **KB_MenuCommandWindow** | Extends `Window_MenuCommand`; ink-blot icons via `drawIcon` overrides; cinnabar brushstroke selection underline replaces default cursor; slide-in animation on `open()`. |
-| **KB_ActorCardMenu** | Same parchment card style as battle UI's `KB_ActorCard`, adapted for taller vertical layout; HP/MP/BT/Ngọc Hồn drawing delegated to existing helpers in KB_BongToiGauge / KB_NgocHonState. |
-| **KB_MenuPartyColumn** | Container; spawns one `KB_ActorCardMenu` per `$gameParty.battleMembers()`, vertical stack. |
-| **Scene_KBJournal** | Hub scene for the Nhật Ký command. Hosts `Window_KBJournalCommand` with 3 entries (Hồi Ký, Yêu Phổ, Nhiệm Vụ); handlers push to CGMZ_Encyclopedia or VisuMZ_2_QuestSystem scenes. Cancel returns to Scene_Menu. |
-| **Window_KBJournalCommand** | 3-item vertical command window inside Scene_KBJournal. Same parchment + brushstroke selection styling as the main command column. |
+| Class | Purpose | Status |
+|-------|---------|--------|
+| **KB_MenuHeader** | Top band: title + location + playtime + gold. Sprite-based dynamic rendering with playtime delta check per frame. | **v0.5.0 shipped** |
+| **KB_MenuAtmosphereLayer** | Renders desaturated ink-wash of current map tilemap into a cached `Bitmap`; PIXI filter chain (Desaturate → Grain → Vignette). Cache key = `$gameMap.mapId()`. | Planned |
+| **KB_MenuCommandWindow** | Extends `Window_MenuCommand`; ink-blot icons via `drawIcon` overrides; cinnabar brushstroke selection underline replaces default cursor; slide-in animation on `open()`. | Planned |
+| **KB_ActorCardMenu** | Same parchment card style as battle UI's `KB_ActorCard`, adapted for taller vertical layout; HP/MP/BT/Ngọc Hồn drawing delegated to existing helpers in KB_BongToiGauge / KB_NgocHonState. | Planned |
+| **KB_MenuPartyColumn** | Container; spawns one `KB_ActorCardMenu` per `$gameParty.battleMembers()`, vertical stack. | Planned |
+| **Scene_KBJournal** | Hub scene for the Nhật Ký command. Hosts `Window_KBJournalCommand` with 3 entries (Hồi Ký, Yêu Phổ, Nhiệm Vụ); handlers push to CGMZ_Encyclopedia or VisuMZ_2_QuestSystem scenes. Cancel returns to Scene_Menu. | Planned |
+| **Window_KBJournalCommand** | 3-item vertical command window inside Scene_KBJournal. Same parchment + brushstroke selection styling as the main command column. | Planned |
 
 ### VisuMZ_1_MainMenuCore integration
 
@@ -214,7 +228,7 @@ Use these MainMenuCore hooks (no core overrides):
 - **Custom command handlers:** plugin params `Custom Cmd 1..N` → wire entries 5 (Journal), 6 (Map), 8 (Save) to their respective scenes via JS code blocks calling `SceneManager.push(...)`.
 - **Layout override:** plugin param `Status Graphic` → `none` (we draw our own); plugin param `Status Window JS > Window Width/Height` → 0 (hide stock status window).
 - **Background:** plugin param `Background Settings > Snapshot` → false; we render our own background via `Scene_Menu.prototype.createBackground` extended in our plugin.
-- **Inject custom layers:** override `Scene_Menu.prototype.create` via `Window_MenuCommand` is too aggressive — instead use `VisuMZ.MainMenuCore.Settings` and add an aliased `Scene_Menu.create` that calls the original then adds `KB_MenuHeader`, `KB_MenuAtmosphereLayer`, `KB_MenuPartyColumn`. All additions are children of `this._windowLayer`'s parent so they layer correctly.
+- **Inject custom layers:** Currently aliasing `Scene_Menu.prototype.create` to add `KB_MenuHeader` (v0.5.0 shipped). Future steps will add `KB_MenuAtmosphereLayer` and `KB_MenuPartyColumn`. All additions are children of `this._windowLayer`'s parent so they layer correctly.
 
 ### Plugin load order
 

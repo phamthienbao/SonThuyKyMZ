@@ -10,6 +10,7 @@ menu_cmd_options;Options
 menu_cmd_save;Save
 menu_cmd_quit;Quit
 menu_unit_gold;Gold
+menu_label_playtime;Playtime
 journal_cmd_story;Story Log
 journal_cmd_bestiary;Bestiary
 journal_cmd_quest;Quest Log
